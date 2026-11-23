@@ -842,15 +842,15 @@ class Deck:
                     f"dry {dry} (app late)  \u00b7  late {late} (deck busy)  \u00b7  cut {gone} ({ms} ms, too much waited)",
                     f"dry {dry}  \u00b7  late {late}  \u00b7  cut {gone}")
         if what[0] == "deck":
-            return {"on": f"fake CDJ {what[1]} on Pro DJ Link  Â·  click to put it on the "
+            return {"on": f"fake CDJ {what[1]} on Pro DJ Link  ·  click to put it on the "
                           "network or take it off",
-                    "play": f"fake CDJ {what[1]}  Â·  play or stop it: a playing deck sends beats",
-                    "sync": f"fake CDJ {what[1]}  Â·  sync on or off: a synced deck plays at the "
+                    "play": f"fake CDJ {what[1]}  ·  play or stop it: a playing deck sends beats",
+                    "sync": f"fake CDJ {what[1]}  ·  sync on or off: a synced deck plays at the "
                             "tempo master's tempo",
-                    "master": f"fake CDJ {what[1]}  Â·  tempo master: it takes the role from "
+                    "master": f"fake CDJ {what[1]}  ·  tempo master: it takes the role from "
                               "whoever has it (the unit included)"}[what[2]]
         if what[0] == "mod":
-            return f"mod {what[1]}  Â·  click to switch it on or off, as the app runs"
+            return f"mod {what[1]}  ·  click to switch it on or off, as the app runs"
         if what[0] == "fold":
             return "click to fold or unfold this section"
         if what[0] == "thumb":
@@ -867,7 +867,7 @@ class Deck:
             how = f"encoder {knob.enc}" if knob.enc is not None else \
                 f"frame word {knob.word:#x}" if knob.word is not None else \
                 "the level of the input the deck sends" if knob.gain else "not identified yet"
-            return "  Â·  ".join(filter(None, [knob.name.replace("_", " "), how,
+            return "  ·  ".join(filter(None, [knob.name.replace("_", " "), how,
                                                  knob.keycap and f"keys {knob.keycap}"]))
         key = L.KEYS[what[1]]
         if key.pad is not None:
@@ -876,7 +876,7 @@ class Deck:
             how = f"frame byte {key.bit[0]} bit {key.bit[1]}"
         else:
             how = "not identified yet"
-        return "  Â·  ".join(filter(None, [key.name.replace("_", " "), how,
+        return "  ·  ".join(filter(None, [key.name.replace("_", " "), how,
                                              key.keycap and f"key {key.keycap}"]))
 
     # ---- input ----------------------------------------------------------
@@ -1558,7 +1558,7 @@ class Deck:
         if mod["needs"]:
             notes.append(mod["needs"])
         for note in notes[:5 - len(lines)]:
-            lines.append((self.wrap("â€º " + note, room, 1)[0], (150, 152, 158)))
+            lines.append((self.wrap("› " + note, room, 1)[0], (150, 152, 158)))
         for i, (text, color) in enumerate(lines):
             win.blit(self.font.render(text, True, color), (x + 12, y + 8 + 18 * i))
 
@@ -1702,7 +1702,7 @@ class Deck:
         places = []
         chip_w = self.small.size("DECKBENCH")[0] + 14
         if self.bench:         # a button beside TOOLS (the two buttons together), with what its decks do on its left, in a place of the widest it says
-            places.append(("bench", chip_w + 8 + self.font.size("decks 4 on Â· 4 playing Â· master 4 Â· 4 with a file")[0]))
+            places.append(("bench", chip_w + 8 + self.font.size("decks 4 on · 4 playing · master 4 · 4 with a file")[0]))
         if self.rec:
             places.append(("rec", self.font.size("REC 00:00:00")[0] + 14))
         if self.link.connected:

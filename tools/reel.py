@@ -982,7 +982,7 @@ def end_card(episode, tl, length):
     chain, y = [], END_Y
     for text, size, colour in card:
         chain.append("drawtext=fontfile=font.ttf:text='%s':x=(w-text_w)/2:y=%d:fontsize=%d:fontcolor=%s:enable='between(t,%.2f,%.2f)'"
-                     % (text.replace("'", "â€™").replace(":", "\\:"), y, int(round(size * SCALE)), colour, t0 + 0.2, t1))
+                     % (text.replace("'", "’").replace(":", "\\:"), y, int(round(size * SCALE)), colour, t0 + 0.2, t1))
         y += int(round(size * SCALE * 1.5))
     return chain
 
