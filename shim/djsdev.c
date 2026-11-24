@@ -1391,6 +1391,17 @@ int ioctl(int fd, unsigned long req, ...)
         }
         return 0;
     }
+    /* The SP-16 asks ethtool for the Ethernet carrier instead of using
+     * the DJS-1000's switch-driver requests. */
+    if (DJSDEV_SP16 && !dev && req == 0x8946 /* SIOCETHTOOL */ && arg &&
+        !memcmp(arg, "eth0", 5)) {
+        unsigned *value = *(unsigned **)((char *)arg + 16);
+
+        if (value && value[0] == 0x0A /* ETHTOOL_GLINK */) {
+            value[1] = 1;
+            return 0;
+        }
+    }
     if (!dev) {
         return network_ioctl(fd, req, arg, real);
     }

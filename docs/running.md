@@ -34,6 +34,11 @@ sends sound to its phones PCM, the deck can play it as a second stereo
 output. Assignable outputs terminate at the backend and the analog filter
 return supplies silence. See [the SP-16 audio profile](emulation.md#sp-16-profile).
 
+For Pro DJ Link sync, set **UTILITY > SYNC SOURCE SELECT** to **PRO DJ LINK**.
+Start playback on the master deck in Deckbench. Then select **AUTO** or its
+player number in **BPM/QUANTIZE > MASTER PLAYER SELECT**. The SP-16 announces itself as
+`TORAIZ` in Deckbench's network devices.
+
 ## Linux and Windows
 
 The backend needs Linux, QEMU ARM user-mode, a cross compiler and X11.
