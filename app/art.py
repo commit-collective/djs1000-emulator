@@ -19,6 +19,7 @@ from functools import lru_cache
 from PIL import Image, ImageChops, ImageDraw, ImageFilter, ImageFont, ImageOps
 
 import layout as L
+import layout_sp16
 
 SS = 2                                   # supersampling factor
 GLOW = 12                                # units of margin a sprite keeps for its glow
@@ -485,6 +486,12 @@ def bg():
     return (0, 0, 0) if STYLE == "real" else BG
 
 
+def set_layout(layout):
+    global L
+    L = layout
+    set_style(STYLE)
+
+
 def set_style(name):
     """"flat" or "real". Call it before anything is drawn: what was made in the other style is forgotten."""
     global STYLE
@@ -511,8 +518,33 @@ def face_alpha(scale):
     return ImageChops.subtract(Image.new("L", black.size, 255), ImageChops.subtract(white, black))
 
 
+def _sp16_face(c):
+    c.gradient_rect(L.BODY, 18, (49, 52, 58), (28, 30, 34), "v")
+    c.rect(L.BODY, radius=18, outline=(93, 98, 106), width=3)
+    c.rect(L.TOP_BLOCK, radius=14, fill=(12, 13, 16), outline=(87, 93, 104), width=3)
+    x0, y0, x1, y1 = L.LCD
+    c.rect((x0 - 12, y0 - 12, x1 + 12, y1 + 12), radius=8, fill=(2, 3, 4),
+           outline=(61, 67, 76), width=2)
+    c.rect(L.LCD, fill=(0, 0, 0))
+    c.rect(L.USB_PORT, radius=5, fill=(20, 20, 23), outline=(119, 123, 129), width=4)
+    c.rect(L.PAD_FRAME, radius=12, fill=(10, 11, 13), outline=(91, 98, 110), width=3)
+    c.rect(L.STRIP, radius=8, fill=(12, 14, 17), outline=(73, 80, 91), width=3)
+    x0, y0, _, y1 = L.STRIP
+    c.gradient_rect((x0 + 25, y0 + 12, x0 + 87, y1 - 12), 5, (53, 58, 67), (27, 31, 38), "v")
+    for text in L.TEXTS:
+        c.text(text.x, text.y, text.text, text.size, fill=text.color, anchor=text.anchor)
+    for knob in L.KNOBS:
+        if knob.look == "knob":
+            _draw_knob(c, knob, 0)
+    for key in L.KEYS:
+        _draw_key(c, key, 0, None, False)
+
+
 def _face(scale, background):
     c = _Canvas(0, 0, L.W, L.H, scale, fill=(*background, 255))
+    if L is layout_sp16:
+        _sp16_face(c)
+        return c.done().convert("RGB")
     real = STYLE == "real"
     if real:
         _real_body(c)

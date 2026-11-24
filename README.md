@@ -4,6 +4,8 @@
 
 Run the Pioneer DJ DJS-1000's own application on your computer to develop
 mods, automate regression checks and debug its UI without hardware.
+The emulator can also run the TORAIZ SP-16 application with its own virtual
+deck. See the [SP-16 setup guide](docs/running.md#toraiz-sp-16).
 
 <img src="https://commitcollective.cc/djs1000/emulator/hero.png" alt="The virtual deck, application screen and installed mod controls" width="1000">
 

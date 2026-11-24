@@ -2,7 +2,8 @@
 
 ## How the app is made to run
 
-The sampler is one ARM program, `EP113_Main_R`, on an embedded Linux board. `scripts/setup.sh` unpacks the unit's own root
+The stock sampler app is an ARM program on an embedded Linux board.
+The DJS-1000 uses `EP113_Main_R` and the SP-16 uses `EP085_Main_R`. `scripts/setup.sh` unpacks the unit's own root
 filesystem from the update file. `scripts/run.sh` runs the program there, unmodified, under `qemu-arm` in user mode: QEMU
 translates the program's instructions and hands its system calls to the host's Linux kernel, with no guest kernel and no
 emulated board. The program runs in a chroot inside a user namespace, so no root is needed. What the board's drivers did is
@@ -35,12 +36,37 @@ thing to answer. Roughly in the order the app asks:
 6. **A screen.** The app draws through X, so `run.sh` starts a hidden Xvfb. The shim drops the request to close the window,
    because the app hangs half shut down if it is closed.
 7. **The boot flow.** `scripts/guest/init.sh` stands in for the end of the unit's start-up script: it runs the stick's
-   `autoexec.bin` first and then starts the app, as a unit does (see A stick's autoexec.bin, below).
+   `autoexec.bin` first on DJS-1000. On SP-16 it starts the official
+   application before running the image so a boot menu can find the process
+   and hand over the panel and screen.
 
 For debugging, every intercepted call is logged with a `[djsdev]` prefix, `run.sh` takes extra `qemu-arm` arguments (`-g` for
 gdb), and a thread's name is visible on the host in `/proc/<pid>/task/*/comm`.
 
-## What is stood in for
+## SP-16 profile
+
+The SP-16 deck and shim use the same 128-byte panel frames and
+little-endian CRC as the DJS-1000. The SP-16 writes its input words
+big-endian, uses a 3 ms panel timer and packs mono lamp on and dim bits
+into separate fields. The controls use the SP-16's encoder, pot and pad
+offsets.
+
+The SP-16 firmware opens these PCM streams at 44.1 kHz with 64-frame
+periods and two periods per buffer.
+
+| Device | Direction | ALSA channels | Format | Backend |
+| --- | --- | --- | --- | --- |
+| `hw:ak4458audio,0` | Playback | 16 | S16_LE | Master stereo from slots 12 and 14 in the default routing |
+| `hw:ak4452audio,0` | Playback | 2 | FLOAT_LE | Headphones stereo |
+| `hw:ak4452audio,1` | Playback | 2 | FLOAT_LE | Analog send to the null PCM |
+| `hw:ak4452audio,0` | Capture | 2 | FLOAT_LE | Stereo deck input |
+| `hw:ak4452audio,1` | Capture | 2 | FLOAT_LE | Silent analog return |
+
+The firmware writes all three playback streams in sequence. The master write
+paces the playback thread once per period. The two capture threads each use
+their own deadlines.
+
+## What is stood in for on DJS-1000
 
 What `djsdev.c` stands in for, and why:
 

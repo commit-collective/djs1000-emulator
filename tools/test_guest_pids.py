@@ -9,6 +9,30 @@ from uuid import uuid4
 
 @unittest.skipUnless(sys.platform.startswith("linux"), "requires Linux procfs")
 class GuestProcesses(unittest.TestCase):
+    def test_boot_menu_session_keeps_its_unit(self):
+        helper = Path(__file__).resolve().parents[1] / "scripts/guest-pids.sh"
+        tag = "test-" + uuid4().hex
+        env = dict(os.environ, DJSDEV_TAG=tag, DJSDEV_UNIT="djs1000")
+        cases = (
+            ("sp16", ["-E", "DJSDEV_UNIT=sp16"], env),
+            ("sp16", [], dict(env, DJSDEV_UNIT="sp16")),
+            ("djs1000", [], env),
+        )
+        for expected, args, child_env in cases:
+            with subprocess.Popen(
+                [sys.executable, "-c", "import time; time.sleep(30)", "/opt/djsemu/init.sh", *args],
+                env=child_env,
+            ) as child:
+                try:
+                    output = subprocess.check_output(
+                        ["bash", "-c", 'source "$1"; guest_init_unit', "test", str(helper)],
+                        env=env,
+                        text=True,
+                    )
+                    self.assertEqual(output.strip(), expected)
+                finally:
+                    child.terminate()
+
     def test_slot_and_exact_argument(self):
         helper = Path(__file__).resolve().parents[1] / "scripts/guest-pids.sh"
         target = "/root/pdj/test-" + uuid4().hex

@@ -1,7 +1,7 @@
 /* SPDX-License-Identifier: GPL-2.0-or-later */
 /*
- * djsdev: LD_PRELOAD shim that stands in for the DJS-1000's board devices so
- * EP113_Main_R runs under qemu-arm user mode.
+ * djsdev: LD_PRELOAD shim that stands in for the sampler's board devices
+ * so the stock application runs under qemu-arm user mode.
  *
  * Every open() of a device in FAKE_DEVS gets either a descriptor on /dev/zero
  * ("zero": reads return zeros at once) or one end of a Unix socket pair
@@ -344,7 +344,21 @@ static unsigned short crc_x25(const unsigned char *p, unsigned n)
  */
 static volatile unsigned char panel[SPI_FRAME];
 static volatile int strip_at = -1;      /* the touch strip: 0-127, or -1 when not touched */
-static const unsigned char ENC_OFFSET[7] = { 0x14, 0x08, 0x0A, 0x0C, 0x0E, 0x10, 0x12 };
+typedef struct {
+    unsigned char encoder[7];      /* selector, then the six parameter knobs */
+    unsigned char pressure, contact;
+    unsigned char big_endian, interval_ms;
+} PanelProfile;
+
+#ifndef DJSDEV_SP16
+#define DJSDEV_SP16 0
+#endif
+
+#if DJSDEV_SP16
+static const PanelProfile panel_profile = {{0x3C, 0x30, 0x32, 0x34, 0x36, 0x38, 0x3A}, 0x06, 0x3F, 1, 3};
+#else
+static const PanelProfile panel_profile = {{0x14, 0x08, 0x0A, 0x0C, 0x0E, 0x10, 0x12}, 0x16, 0x36, 0, 0};
+#endif
 
 static void panel_bit(unsigned byte, unsigned bit, int on)
 {
@@ -376,18 +390,20 @@ static void panel_unlock(void)
 static void panel_word(unsigned off, int value)
 {
     if (off < 0x7B) {
-        panel[off] = value & 0xFF;
-        panel[off + 1] = (value >> 8) & 0xFF;
+        unsigned high = !panel_profile.big_endian;
+        panel[off + 1 - high] = value & 0xFF;
+        panel[off + high] = (value >> 8) & 0xFF;
     }
 }
 
 static void panel_enc(unsigned n, int delta)
 {
     if (n < 7) {
-        unsigned off = ENC_OFFSET[n];
+        unsigned off = panel_profile.encoder[n];
+        unsigned high = !panel_profile.big_endian;
 
         panel_lock();
-        panel_word(off, (short)(panel[off] | panel[off + 1] << 8) + delta);
+        panel_word(off, (short)(panel[off + 1 - high] | panel[off + high] << 8) + delta);
         panel_unlock();
     }
 }
@@ -647,8 +663,8 @@ static void panel_command(const char *line)
         panel_enc(a, b);
     } else if (sscanf(line, "pad %i %i %i", &a, &b, &c) == 3 && a >= 0 && a < 16) {
         panel_lock();
-        panel_word(0x16 + 2 * a, b);
-        panel_word(0x36 + 2 * a, c);
+        panel_word(panel_profile.pressure + 2 * a, b);
+        panel_word(panel_profile.contact + 2 * a, c);
         panel_unlock();
     } else if (sscanf(line, "strip %i", &a) == 1) {
         strip_at = a < 0 ? -1 : a > 127 ? 127 : a;
@@ -1007,10 +1023,12 @@ static void *deck_server(void *arg)
  *   H                      HOME (byte 1 bit 3)
  *   Space, B, N            PLAY/PAUSE, STOP, REC (byte 2 bits 3, 2, 1)
  *   1-8, Q-I               step keys 1-8 (byte 3 bits 0-7), 9-16 (byte 4)
+ * DJS-1000 shortcuts:
  *   P                      PROJECT (byte 5 bit 5): opens and closes its menu
  *   L, X, -, S             LIVE SAMPLING, FX, TEMPO RANGE, SYNC
  *                          (byte 5 bits 6-7, byte 6 bits 4-5)
- * All found with tools/probe.py. Byte 5 bit 4 (button id 0) is tied to
+ * On SP-16, M, C and G select MODE, SCENE and PATTERN.
+ * DJS-1000 controls were found with tools/probe.py. Byte 5 bit 4 (button id 0) is tied to
  * power/standby: a press and release puts the app in standby ("transition
  * Standby!", tx byte 0x6C bit 1). No key is bound to it.
  * (JUCE itself takes the arrows and Page Up/Down for its lists.)
@@ -1063,15 +1081,21 @@ int XNextEvent(void *display, void *event)
         panel_bit(3, code - 10, type == 2);
     } else if (code >= 24 && code <= 31) {  /* Q-I: step keys 9-16 */
         panel_bit(4, code - 24, type == 2);
-    } else if (code == 33) {                /* P: PROJECT (toggles the menu) */
+    } else if (DJSDEV_SP16 && code == 58) { /* M: MODE */
+        panel_bit(2, 5, type == 2);
+    } else if (DJSDEV_SP16 && code == 54) { /* C: SCENE */
+        panel_bit(2, 6, type == 2);
+    } else if (DJSDEV_SP16 && code == 42) { /* G: PATTERN */
+        panel_bit(2, 7, type == 2);
+    } else if (!DJSDEV_SP16 && code == 33) { /* P: PROJECT */
         panel_bit(5, 5, type == 2);
-    } else if (code == 46) {            /* L: LIVE SAMPLING */
+    } else if (!DJSDEV_SP16 && code == 46) { /* L: LIVE SAMPLING */
         panel_bit(5, 6, type == 2);
-    } else if (code == 53) {            /* X: FX */
+    } else if (!DJSDEV_SP16 && code == 53) { /* X: FX */
         panel_bit(5, 7, type == 2);
-    } else if (code == 20) {            /* -: TEMPO RANGE */
+    } else if (!DJSDEV_SP16 && code == 20) { /* -: TEMPO RANGE */
         panel_bit(6, 4, type == 2);
-    } else if (code == 39) {            /* S: SYNC / MASTER (shows "No LINKED Players") */
+    } else if (!DJSDEV_SP16 && code == 39) { /* S: SYNC / MASTER (shows "No LINKED Players") */
         panel_bit(6, 5, type == 2);
     } else if (type == 2 && code >= 67 && code <= 72) {
         panel_enc(code - 66, shift ? -1 : 1);
@@ -1082,7 +1106,7 @@ int XNextEvent(void *display, void *event)
 /* The touch strip, which is what the second link (/dev/cdc_spi2.0) carries:
  * a 4-byte reply whose first byte is 127 less the position and whose second
  * has bit 7 set while the strip is touched (CdcManager's read). */
-static int strip_last;
+static int strip_last = DJSDEV_SP16 ? 64 : 0;
 
 /* The reply to an exchange: the panel's input state for the panel link, the
  * strip's for the other. */
@@ -1130,7 +1154,7 @@ static void *spi_thread(void *arg)
          * panel for it, tx byte 0x6C bit 1, nothing answers that here). This
          * was the way to wake the panel while the audio device failed to
          * open. It is kept for looking at standby itself. */
-        if (s->rx_bytes == SPI_FRAME && power_ms >= 0 && getenv("DJSDEV_POWER_PULSE")) {
+        if (!DJSDEV_SP16 && s->rx_bytes == SPI_FRAME && power_ms >= 0 && getenv("DJSDEV_POWER_PULSE")) {
             if (!x_dpy) {
                 panel_bit(5, 4, 1);
             } else if ((power_ms += s->interval ? s->interval : 10) >= 5000) {
@@ -1195,13 +1219,20 @@ static int open_common(const char *sym, const char *path, int flags, int mode)
             s->fd = sv[0];
             s->peer = sv[1];
             s->rx_bytes = SPI_FRAME;
+            s->interval = panel_profile.interval_ms;
             fake_spi[sv[0]] = s;
             if (strstr(s->name, "subucom_spi0.1")) {
                 panel_spi = s;
                 /* The tempo slider at its centre: its reading (0x58) and the
                  * centre's reference (0x56). */
-                panel_word(0x56, 512);
-                panel_word(0x58, 512);
+                if (DJSDEV_SP16) {
+                    panel_word(0x26, 1023);
+                    panel_word(0x28, 784);
+                    panel_word(0x2A, 1023);
+                } else {
+                    panel_word(0x56, 512);
+                    panel_word(0x58, 512);
+                }
             }
         }
     }
@@ -1314,6 +1345,7 @@ static int spi_ioctl(Spi *s, unsigned long req, void *arg)
             s->rx_bytes = *(unsigned *)arg;
             if (s->rx_bytes > SPI_FRAME) {
                 s->rx_bytes = SPI_FRAME;
+            s->interval = panel_profile.interval_ms;
             }
         }
         return 0;
@@ -1852,72 +1884,124 @@ int setsockopt(int fd, int level, int name, const void *val, unsigned len)
     return fake_fd(fd) == PACKET_NAME ? 0 : real(fd, level, name, val, len);
 }
 
-/* The board's sound card is an AK4452 DAC, opened as "hw:ak4452audio,N"
- * (0: headphones and input, 1: master). It goes to the ALSA PCM named by
- * DJSDEV_PCM instead, "null" (discard, and silence on the inputs) by default.
- *
- * The app's ALSA code (its open routine) sizes its buffers from the channel
- * ranges the devices report. It asks for 4 outputs in all and gives each of
- * the two output devices as many as it accepts, so the board's must take
- * exactly 2 each (the AK4452 is a stereo DAC). With the 1-32 that "null"
- * reports the first device takes all 4, the second is given channels past
- * the end of the output buffer, and the audio thread crashes copying them
- * (in its audio thread). And if the input cannot be opened the
- * whole device fails to open, nothing gets a sample rate, and the startup
- * project load never finishes. So the ranges are narrowed to the board's. */
+/* ALSA endpoints exposed by the board. The deck link carries the master,
+ * phones and external input in stereo. The SP-16 also uses a second
+ * stereo pair for the analog filter, which otherwise terminates at null. */
+enum { FORMAT_S16_LE = 2, FORMAT_S24_LE = 6, FORMAT_FLOAT_LE = 14 };
+enum { MASTER, PHONES, INPUT, FILTER_SEND, FILTER_RETURN };
+
+typedef struct {
+    const char *name;
+    int stream, channels, format, role;
+} PcmProfile;
+
+#if DJSDEV_SP16
+static const PcmProfile pcm_profiles[] = {
+    {"hw:ak4458audio,0", 0, 16, FORMAT_S16_LE, MASTER},
+    {"hw:ak4452audio,0", 0, 2, FORMAT_FLOAT_LE, PHONES},
+    {"hw:ak4452audio,1", 0, 2, FORMAT_FLOAT_LE, FILTER_SEND},
+    {"hw:ak4452audio,0", 1, 2, FORMAT_FLOAT_LE, INPUT},
+    {"hw:ak4452audio,1", 1, 2, FORMAT_FLOAT_LE, FILTER_RETURN},
+};
+#else
+static const PcmProfile pcm_profiles[] = {
+    {"hw:ak4452audio,1", 0, 2, FORMAT_S24_LE, MASTER},
+    {"hw:ak4452audio,0", 0, 2, FORMAT_S24_LE, PHONES},
+    {"hw:ak4452audio,0", 1, 2, FORMAT_S24_LE, INPUT},
+};
+#endif
+
+typedef struct {
+    long long due;
+    unsigned fraction;
+} PcmClock;
+
+typedef struct {
+    void *handle;
+    const PcmProfile *profile;
+    void *params;
+    PcmClock clock;
+} StandPcm;
+
 #define STAND_PCMS 16
-static void *stand_pcm[STAND_PCMS];      /* handles opened in place of the AK4452 */
-static int stand_stream[STAND_PCMS];
-static void *ranged_params;              /* the hw_params last filled from one of them */
-static int ranged_chans;
-static void *master_pcm;                 /* the handles opened in place of hw:ak4452audio,1, */
-static void *phones_pcm, *input_pcm;     /* of ,0 for playback and of ,0 for capture */
+static StandPcm stand_pcm[STAND_PCMS];
+static volatile int pcm_busy;
+
+static void lock_pcms(void)
+{
+    while (__sync_lock_test_and_set(&pcm_busy, 1)) {
+    }
+}
+
+static void unlock_pcms(void)
+{
+    __sync_lock_release(&pcm_busy);
+}
+
+static StandPcm *find_pcm(void *handle)
+{
+    int i;
+
+    for (i = 0; handle && i < STAND_PCMS; i++) {
+        if (__atomic_load_n(&stand_pcm[i].handle, __ATOMIC_ACQUIRE) == handle) {
+            return &stand_pcm[i];
+        }
+    }
+    return 0;
+}
 
 int snd_pcm_open(void **pcm, const char *name, int stream, int mode)
 {
     int (*real)(void **, const char *, int, int) = dlsym(RTLD_NEXT, "snd_pcm_open");
+    const PcmProfile *profile;
     const char *to;
-    int r, i;
+    unsigned i;
+    int result;
 
-    if (!name || !strstr(name, "ak4452audio")) {
+    for (i = 0; name && i < sizeof(pcm_profiles) / sizeof(*pcm_profiles); i++) {
+        if (pcm_profiles[i].stream == stream && !strcmp(name, pcm_profiles[i].name)) {
+            break;
+        }
+    }
+    if (!name || i == sizeof(pcm_profiles) / sizeof(*pcm_profiles)) {
         return real(pcm, name, stream, mode);
     }
+    profile = &pcm_profiles[i];
     to = getenv("DJSDEV_PCM");
     if (!to || !*to) {
         to = "null";
     }
-    r = real(pcm, to, stream, mode);
-    fprintf(stderr, "[djsdev] snd_pcm_open(%s, %s) -> %s = %d\n", name, stream ? "capture" : "playback", to, r);
-    if (r >= 0) {
-        if (stream) {
-            input_pcm = *pcm;
-        } else if (strstr(name, ",1")) {
-            master_pcm = *pcm;
-        } else {
-            phones_pcm = *pcm;
+    result = real(pcm, to, stream, mode);
+    if (result >= 0) {
+        lock_pcms();
+        for (i = 0; i < STAND_PCMS && stand_pcm[i].handle; i++) {
         }
-        for (i = 0; i < STAND_PCMS; i++) {
-            if (!stand_pcm[i] || stand_pcm[i] == *pcm) {
-                stand_pcm[i] = *pcm;
-                stand_stream[i] = stream;
-                break;
-            }
+        if (i == STAND_PCMS) {
+            int (*real_close)(void *) = dlsym(RTLD_NEXT, "snd_pcm_close");
+
+            unlock_pcms();
+            real_close(*pcm);
+            return -24;    /* EMFILE */
         }
+
+        StandPcm *stand = &stand_pcm[i];
+
+        stand->profile = profile;
+        stand->params = 0;
+        stand->clock = (PcmClock){0, 0};
+        __atomic_store_n(&stand->handle, *pcm, __ATOMIC_RELEASE);
+        unlock_pcms();
     }
-    return r;
+    fprintf(stderr, "[djsdev] snd_pcm_open(%s, %s) -> %s = %d (%d channels, format %d)\n",
+            name, stream ? "capture" : "playback", to, result, profile->channels, profile->format);
+    return result;
 }
 
-/*
- * Playback. "null" takes what it is given at once, so the app's audio thread
- * (its audio thread: wait, write both outputs, read the input, run the callback)
- * would spin as fast as the CPU allows: time in the app would run fast and a
- * core would be burnt. The board's DAC takes 44100 frames a second, so the
- * write to the master output waits for that. What is written there is also
- * kept for the virtual deck, which plays it.
- */
+/* The stock apps pace their playback streams on one thread. The master
+ * write is the clock for that thread, so the writes to other outputs do
+ * not accumulate extra delays. SP-16 capture runs on separate threads. */
 #define RATE 44100
-static long long pace_us;               /* when the master output is due its next frame */
-static unsigned pace_frac;              /* and the 65536ths of a microsecond */
+static PcmClock master_clock;
 /*
  * The guest's clock is the host's (WSL's), which can run several percent away from the clock of the sound card the deck
  * plays on (measured 7 % fast, 2026-10-30): time in the app, its sequencer included, then runs that much off and the
@@ -1938,12 +2022,31 @@ static long long now_us(void)
     return ts.tv_sec * 1000000ll + (unsigned long)ts.tv_nsec / 1000;
 }
 
+/* Sleep to an absolute deadline, resetting after a stall. The time is
+ * measured in 65536ths of a microsecond to keep rounding from drifting. */
+static void pcm_wait(PcmClock *clock, long long now, unsigned long frames)
+{
+    unsigned long us = frames * 1000000ul;
+    unsigned block = ((us / RATE) << 16) + ((us % RATE) << 16) / RATE;
+    unsigned scale = (unsigned)(65536 + (pace_ppm * 4295 >> 16));
+    unsigned long long time = ((unsigned long long)block * scale >> 16) + clock->fraction;
+
+    if (clock->due < now - 100000) {
+        clock->due = now;
+    }
+    clock->due += (long long)(time >> 16);
+    clock->fraction = (unsigned)time & 0xFFFF;
+    if (clock->due > now) {
+        usleep((unsigned)(clock->due - now));
+    }
+}
+
 /* frames of sound for output ch (0 master, 1 headphones): left and right are
  * `step` floats apart. The master's sets the pace. */
 static void audio_put(int ch, const float *l, const float *r, unsigned step, unsigned long frames)
 {
     long long now;
-    unsigned long i, us = frames * 1000000ul;   /* a block is at most a few thousand frames */
+    unsigned long i;
     unsigned w = ring_w[ch];
 
     if (ch) {
@@ -1971,22 +2074,7 @@ static void audio_put(int ch, const float *l, const float *r, unsigned step, uns
     }
     ring_w[0] = w;
 
-    /* Real time: sleep until this block is due. Start over after a stall. The block's time, in 65536ths of a microsecond,
-     * is scaled by the deck's correction (ppm * 4295 / 65536 is ppm / 1000000 in 65536ths). */
-    if (pace_us < now - 100000) {
-        pace_us = now;
-    }
-    {
-        unsigned block = ((us / RATE) << 16) + ((us % RATE) << 16) / RATE;
-        unsigned scale = (unsigned)(65536 + (pace_ppm * 4295 >> 16));
-        unsigned long long t = ((unsigned long long)block * scale >> 16) + pace_frac;
-
-        pace_us += (long long)(t >> 16);
-        pace_frac = (unsigned)t & 0xFFFF;
-    }
-    if (pace_us > now) {
-        usleep((unsigned)(pace_us - now));
-    }
+    pcm_wait(&master_clock, now, frames);
 
     stat_frames += frames;
     if (now - stat_us >= 10000000) {
@@ -2000,28 +2088,41 @@ static void audio_put(int ch, const float *l, const float *r, unsigned step, uns
     }
 }
 
-/*
- * The sample format. The app tries nine formats in turn and takes
- * the first the device accepts: "null" accepts 32-bit float, the first, but
- * the unit's AK4452 settles on S24_LE (24 bits in the low three bytes of a
- * 32-bit word, /proc/asound on a unit, 2026-10-02). The board's devices here
- * accept only that, so that the app writes what it writes on the unit, and
- * what passes through a preloaded library (a mod) is in the unit's format.
- */
-#define FORMAT_S24_LE 6
-
+/* Keep ALSA's null device from accepting a format the board would reject.
+ * In particular, the DJS app tries float first but the board uses S24_LE. */
 int snd_pcm_hw_params_set_format(void *pcm, void *params, int format)
 {
     int (*real)(void *, void *, int) = dlsym(RTLD_NEXT, "snd_pcm_hw_params_set_format");
-    int i;
+    StandPcm *stand = find_pcm(pcm);
 
-    for (i = 0; i < STAND_PCMS; i++) {
-        if (pcm && stand_pcm[i] == pcm && format != FORMAT_S24_LE) {
-            return -22;     /* -EINVAL */
-        }
+    if (stand && format != stand->profile->format) {
+        return -22;    /* EINVAL */
     }
     return real(pcm, params, format);
 }
+
+#if DJSDEV_SP16
+/* The app reports eight logical AK4458 channels. Check the width it
+ * actually requests from ALSA before reading its sixteen S16 slots. */
+int snd_pcm_hw_params_set_channels(void *pcm, void *params, unsigned channels)
+{
+    int (*real)(void *, void *, unsigned) = dlsym(RTLD_NEXT, "snd_pcm_hw_params_set_channels");
+    StandPcm *stand = find_pcm(pcm);
+    int result;
+
+    if (stand && channels != (unsigned)stand->profile->channels) {
+        fprintf(stderr, "[djsdev] %s requested %u channels, expected %d\n",
+                stand->profile->name, channels, stand->profile->channels);
+        return -22;    /* EINVAL */
+    }
+    result = real(pcm, params, channels);
+    if (stand && result >= 0) {
+        fprintf(stderr, "[djsdev] %s %s set to %u ALSA channels\n",
+                stand->profile->name, stand->profile->stream ? "capture" : "playback", channels);
+    }
+    return result;
+}
+#endif
 
 /* S24_LE frames as floats, for the deck, a block at a time: left and right
  * are `step` words apart. */
@@ -2041,41 +2142,85 @@ static void audio_put_s24(int ch, const int *l, const int *r, unsigned step, uns
     }
 }
 
+/* SP-16 main is a 16-channel stream. Only channels 12 and 14 carry
+ * the stereo mix in the default routing. */
+static void audio_put_sp16(const short *samples, unsigned long frames)
+{
+    float stereo[2 * 64];
+
+    while (frames) {
+        unsigned long i, count = frames < 64 ? frames : 64;
+
+        for (i = 0; i < count; i++, samples += 16) {
+            stereo[2 * i] = samples[12] * (1.0f / 32768.0f);
+            stereo[2 * i + 1] = samples[14] * (1.0f / 32768.0f);
+        }
+        audio_put(0, stereo, stereo + 1, 2, count);
+        frames -= count;
+    }
+}
+
 long snd_pcm_writei(void *pcm, const void *buf, unsigned long frames)
 {
     long (*real)(void *, const void *, unsigned long) = dlsym(RTLD_NEXT, "snd_pcm_writei");
 
-    if (pcm == master_pcm || pcm == phones_pcm) {
-        audio_put_s24(pcm == phones_pcm, buf, (const int *)buf + 1, 2, frames);
+    StandPcm *stand = find_pcm(pcm);
+
+    if (stand && stand->profile->role <= PHONES) {
+        int role = stand->profile->role;
+        if (!DJSDEV_SP16) {
+            audio_put_s24(role, buf, (const int *)buf + 1, 2, frames);
+        } else if (role == MASTER) {
+            audio_put_sp16(buf, frames);
+        } else {
+            audio_put(role, buf, (const float *)buf + 1, 2, frames);
+        }
     }
     return real(pcm, buf, frames);
 }
 
 /* The input. The app reads interleaved frames and takes each sample as 24
- * bits in a 32-bit word, whatever format was agreed. What the deck
- * has sent is handed over. Silence when there is not enough, and the oldest
- * is dropped when the deck's clock runs ahead of the app's. */
+ * bits in a 32-bit word on the DJS and float on the SP-16. Deliver the
+ * deck's stereo input, or silence when there is not enough. Drop the oldest
+ * frames when the deck's clock runs ahead of the app's. */
 long snd_pcm_readi(void *pcm, void *buf, unsigned long frames)
 {
     long (*real)(void *, void *, unsigned long) = dlsym(RTLD_NEXT, "snd_pcm_readi");
-    int *out = buf;
+    StandPcm *stand = find_pcm(pcm);
     unsigned long i;
-    unsigned r = in_r, have = in_w - r;
+    unsigned r, have;
 
-    if (pcm != input_pcm) {
+    if (!stand || !stand->profile->stream) {
         return real(pcm, buf, frames);
     }
+    if (DJSDEV_SP16) {
+        pcm_wait(&stand->clock, now_us(), frames);
+        if (stand->profile->role == FILTER_RETURN) {
+            memset(buf, 0, frames * 2 * sizeof(float));
+            return frames;
+        }
+    }
+    r = in_r;
+    have = in_w - r;
     if (have > RING_FRAMES / 4) {           /* over 90 ms waiting: catch up */
         r = in_w - RING_FRAMES / 16;
         have = in_w - r;
     }
     for (i = 0; i < frames; i++) {
+        int left = 0, right = 0;
         if (have >= frames) {
-            out[2 * i] = in_ring[(r % RING_FRAMES) * 2] << 8;
-            out[2 * i + 1] = in_ring[(r % RING_FRAMES) * 2 + 1] << 8;
+            left = in_ring[(r % RING_FRAMES) * 2];
+            right = in_ring[(r % RING_FRAMES) * 2 + 1];
             r++;
+        }
+        if (DJSDEV_SP16) {
+            float *out = buf;
+            out[2 * i] = left * (1.0f / 32768.0f);
+            out[2 * i + 1] = right * (1.0f / 32768.0f);
         } else {
-            out[2 * i] = out[2 * i + 1] = 0;
+            int *out = buf;
+            out[2 * i] = left * 256;
+            out[2 * i + 1] = right * 256;
         }
     }
     in_r = r;
@@ -2086,8 +2231,10 @@ long snd_pcm_writen(void *pcm, void **bufs, unsigned long frames)
 {
     long (*real)(void *, void **, unsigned long) = dlsym(RTLD_NEXT, "snd_pcm_writen");
 
-    if (pcm == master_pcm || pcm == phones_pcm) {
-        audio_put_s24(pcm == phones_pcm, bufs[0], bufs[1], 1, frames);
+    StandPcm *stand = find_pcm(pcm);
+
+    if (!DJSDEV_SP16 && stand && stand->profile->role <= PHONES) {
+        audio_put_s24(stand->profile->role, bufs[0], bufs[1], 1, frames);
     }
     return real(pcm, bufs, frames);
 }
@@ -2095,61 +2242,75 @@ long snd_pcm_writen(void *pcm, void **bufs, unsigned long frames)
 int snd_pcm_close(void *pcm)
 {
     int (*real)(void *) = dlsym(RTLD_NEXT, "snd_pcm_close");
-    int i;
+    StandPcm *stand;
 
-    for (i = 0; i < STAND_PCMS; i++) {
-        if (stand_pcm[i] == pcm) {
-            stand_pcm[i] = 0;
-        }
+    lock_pcms();
+    stand = find_pcm(pcm);
+    if (stand) {
+        stand->params = 0;
+        __atomic_store_n(&stand->handle, 0, __ATOMIC_RELEASE);
     }
-    if (pcm == master_pcm) {
-        master_pcm = 0;
-    }
-    if (pcm == phones_pcm) {
-        phones_pcm = 0;
-    }
-    if (pcm == input_pcm) {
-        input_pcm = 0;
-    }
+    unlock_pcms();
     return real(pcm);
 }
 
 int snd_pcm_hw_params_any(void *pcm, void *params)
 {
     int (*real)(void *, void *) = dlsym(RTLD_NEXT, "snd_pcm_hw_params_any");
+    int result = real(pcm, params);
+    StandPcm *stand;
     int i;
 
-    if (ranged_params == params) {
-        ranged_params = 0;
-    }
+    lock_pcms();
     for (i = 0; i < STAND_PCMS; i++) {
-        if (pcm && stand_pcm[i] == pcm) {
-            ranged_params = params;
-            ranged_chans = 2;   /* stereo in, stereo out */
+        if (stand_pcm[i].params == params) {
+            stand_pcm[i].params = 0;
         }
     }
-    return real(pcm, params);
+    stand = find_pcm(pcm);
+    if (stand && result >= 0) {
+        stand->params = params;
+    }
+    unlock_pcms();
+    return result;
+}
+
+static int pcm_channels(const void *params)
+{
+    int i, channels = 0;
+
+    lock_pcms();
+    for (i = 0; i < STAND_PCMS; i++) {
+        if (params && stand_pcm[i].params == params) {
+            channels = stand_pcm[i].profile->channels;
+            break;
+        }
+    }
+    unlock_pcms();
+    return channels;
 }
 
 int snd_pcm_hw_params_get_channels_min(const void *params, unsigned *val)
 {
     int (*real)(const void *, unsigned *) = dlsym(RTLD_NEXT, "snd_pcm_hw_params_get_channels_min");
+    int channels = pcm_channels(params);
 
-    if (params != ranged_params) {
+    if (!channels) {
         return real(params, val);
     }
-    *val = ranged_chans;
+    *val = channels;
     return 0;
 }
 
 int snd_pcm_hw_params_get_channels_max(const void *params, unsigned *val)
 {
     int (*real)(const void *, unsigned *) = dlsym(RTLD_NEXT, "snd_pcm_hw_params_get_channels_max");
+    int channels = pcm_channels(params);
 
-    if (params != ranged_params) {
+    if (!channels) {
         return real(params, val);
     }
-    *val = ranged_chans;
+    *val = channels;
     return 0;
 }
 

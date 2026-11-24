@@ -1,12 +1,13 @@
 #!/usr/bin/env python3
 # SPDX-License-Identifier: GPL-2.0-or-later
-"""Starts the DJS-1000: the emulator, then the virtual deck. Closing the deck
+"""Starts the sampler emulator, then the virtual deck. Closing the deck
 stops the emulator.
 
     python start.py [options] [deck options]      (start.cmd / start.sh do the same)
     python start.py stop                          stop a running emulator
     python start.py status                        say whether one is running
 
+  --unit NAME           djs1000 (default) or sp16
   --keep                leave the emulator running when the deck is closed
   --no-deck             start the emulator only (and leave it running)
   --window              show the app's own window too (it is hidden when Xvfb is
@@ -43,9 +44,8 @@ FEED = "127.0.0.1:7330"                 # where the emulator sends its copy of t
 AUDIO_PORT = 7320                       # where deckbench serves its decks' sound (the deck's --input-tcp takes it)
 WINDOWS = os.name == "nt"
 # Several emulators can run at once, each in a slot (DJS_SLOT=N in the environment of whatever starts them, as the
-# tests' runner does): the slot has a home of its own, ~/djs-sN (made from ~/djs the first time), a deck link port of
-# its own (DJS_PORT, 7310 + N) and a tag, DJSDEV_TAG=sN, among the arguments of every one of its processes, by which
-# it finds and ends its own and no other's. Without a slot there is one emulator, in ~/djs, on 7310.
+# tests' runner does). Each slot has its own home, ~/djs-sN or ~/sp16-sN, and deck link port (DJS_PORT, 7310 + N).
+# DJSDEV_TAG=sN lets it find and stop its own processes. Without a slot the launcher uses port 7310.
 
 
 with open(os.path.join(REPO, "scripts", "guest-pids.sh"), encoding="utf-8") as _pid_file:
@@ -69,8 +69,9 @@ def bench_address(rows, environment):
 
 
 class Emulator:
-    def __init__(self, distro, port, window=False, env=""):
+    def __init__(self, distro, port, window=False, env="", unit="djs1000"):
         self.distro = distro
+        app_name, home = {"djs1000": ("EP113_Main_R", "djs"), "sp16": ("EP085_Main_R", "sp16")}[unit]
         self.port = port
         self.window = window
         self.manage_bench = True
@@ -85,17 +86,26 @@ class Emulator:
             self.port = int(os.environ["DJS_PORT"])
         # What runs the guest (proot, or a chroot, see scripts/run.sh) shows the program in its command line. A slot's
         # processes are told from the others' by DJSDEV_TAG in their environment (every process of the guest has it).
-        self.prelude = ('export DJS_HOME="$HOME/djs-%s" DJSDEV_TAG=%s\n' % (self.tag, self.tag)) if self.tag else ""
+        self.prelude = f'export DJSDEV_UNIT={unit} BASE_HOME="$HOME/{home}"\n'
+        if self.tag:
+            self.prelude += f'export DJS_HOME="$BASE_HOME-{self.tag}" DJSDEV_TAG={self.tag}\n'
+        else:
+            self.prelude += 'export DJS_HOME="${DJS_HOME:-$BASE_HOME}"\n'
+        self.prelude += f'APP_NAME={app_name}\nAPP_PATTERN="(/root/pdj/|[.]/)$APP_NAME"\n'
         self.prelude += PIDS
-        self.running_cmd = '[ -n "$(pids_of /root/pdj/EP113_Main_R)" ]'
+        self.running_cmd = '[ -n "$(pids_of "$APP_PATTERN")" ]'
         # The app, or the start-up before it (a stick's autoexec runs first).
-        self.starting_cmd = '[ -n "$(pids_of "/root/pdj/EP113_Main_R|/opt/djsemu/init.sh")" ]'
+        self.starting_cmd = '[ -n "$(pids_of "$APP_PATTERN|/opt/djsemu/init.sh")" ]'
         if os.environ.get("DJS_PROOT"):
             self.env += " DJS_PROOT=1"       # proot in place of a chroot, see scripts/run.sh
         if os.environ.get("DJS_FAST_BOOT"):
             self.env += " DJSDEV_DIRECT=1"   # see scripts/guest/init.sh
         if os.environ.get("DJS_EMMC"):
             self.env += ' DJS_EMMC=' + shlex.quote(os.environ["DJS_EMMC"])   # the unit's internal storage: a folder in WSL, see scripts/run.sh
+        other_app = "EP113_Main_R" if unit == "sp16" else "EP085_Main_R"
+        other_unit = "djs1000" if unit == "sp16" else "sp16"
+        self.other_running_cmd = (f'[ -n "$(pids_of "(/root/pdj/|[.]/){other_app}")" ]'
+                                  f' || [ "$(guest_init_unit)" = {other_unit} ]')
         self._repo = None
 
     def sh(self, script):
@@ -201,7 +211,7 @@ F="${DJS_HOME:-$HOME/djs}/run/autoexec/modlist.txt"
         return bool(environment.get('DJSDEV_INTERFACE'))
 
     def network_matches(self, command):
-        code, pid = self.sh('pids_of /root/pdj/EP113_Main_R | head -1')
+        code, pid = self.sh('pids_of "$APP_PATTERN" | head -1')
         return not code and pid.isdecimal() and network_query(command, 'matches', pid)
 
     def clock_fought(self):
@@ -216,7 +226,7 @@ F="${DJS_HOME:-$HOME/djs}/run/autoexec/modlist.txt"
 
     def feeds(self):
         """Whether the running emulator sends its copy of the link (it was started with DJSDEV_TAP)."""
-        code, pid = self.sh('pids_of /root/pdj/EP113_Main_R | head -1')
+        code, pid = self.sh('pids_of "$APP_PATTERN" | head -1')
         if code or not pid.isdecimal():
             return False
         return self.sh("tr '\\0' '\\n' < /proc/%s/environ | grep -q '^DJSDEV_TAP='" % pid)[0] == 0
@@ -224,21 +234,27 @@ F="${DJS_HOME:-$HOME/djs}/run/autoexec/modlist.txt"
     def running(self):
         return self.sh(self.running_cmd)[0] == 0
 
+    def other_running(self):
+        return self.sh(self.other_running_cmd)[0] == 0
+
+    def starting(self):
+        return self.sh(self.starting_cmd)[0] == 0
+
     def ensure_home(self):
-        """The slot's home, made from ~/djs the first time (the unit's root file system and the key: 250 MB)."""
+        """The slot's home, made from the selected unit home the first time (the unit's root file system and the key: 250 MB)."""
         if self.tag:
             self.sh("""
-[ -x "$DJS_HOME/root/root/pdj/EP113_Main_R" ] && exit 0
+[ -x "$DJS_HOME/root/root/pdj/$APP_NAME" ] && exit 0
 mkdir -p "$DJS_HOME"
-cp -a "$HOME/djs/aes256.key" "$DJS_HOME/" 2> /dev/null
-if command -v rsync > /dev/null; then rsync -a "$HOME/djs/root/" "$DJS_HOME/root/"; else cp -a "$HOME/djs/root" "$DJS_HOME/"; fi
+cp -a "$BASE_HOME/aes256.key" "$DJS_HOME/" 2> /dev/null
+if command -v rsync > /dev/null; then rsync -a "$BASE_HOME/root/" "$DJS_HOME/root/"; else cp -a "$BASE_HOME/root" "$DJS_HOME/"; fi
 """)
 
     def stale(self):
         """Whether the running emulator started before the shim's source (or
         the script that builds it) last changed: it still has the old shim."""
         return self.sh("""
-PID=$(pids_of /root/pdj/EP113_Main_R | head -1)
+PID=$(pids_of "$APP_PATTERN" | head -1)
 [ -n "$PID" ] && { [ %s/shim/djsdev.c -nt "/proc/$PID" ] || [ %s/shim/network.h -nt "/proc/$PID" ] || [ %s/scripts/run.sh -nt "/proc/$PID" ]; }
 """ % ((shlex.quote(self.repo()),) * 3))[0] == 0
 
@@ -279,9 +295,9 @@ if [ -n "${DJSDEV_TAG:-}" ]; then
         sleep 0.3
     done
 else
-    kill $(pids_of /root/pdj/EP113_Main_R) $(pids_of /opt/djsemu/init.sh) 2> /dev/null
+    kill $(pids_of "$APP_PATTERN") $(pids_of /opt/djsemu/init.sh) 2> /dev/null
     for i in 1 2 3 4 5 6 7 8 9 10; do %s || break; sleep 0.3; done
-    kill -9 $(pids_of /root/pdj/EP113_Main_R) $(pids_of /opt/djsemu/init.sh) 2> /dev/null
+    kill -9 $(pids_of "$APP_PATTERN") $(pids_of /opt/djsemu/init.sh) 2> /dev/null
     # What is left of the guest, such as a stick's script started on its own: every process with the empty tag.
     for f in $(grep -laP "(?:^|\\x00)DJSDEV_TAG=\\x00" /proc/[0-9]*/environ 2> /dev/null); do
         p=${f#/proc/}; p=${p%%/environ}
@@ -381,8 +397,11 @@ def main():
         print(__doc__)
         deck_help()
         return 0
+    unit = take(args, "--unit", os.environ.get("DJSDEV_UNIT", "djs1000"))
+    if unit not in ("djs1000", "sp16"):
+        sys.exit("--unit must be djs1000 or sp16")
     emu = Emulator(take(args, "--distro", os.environ.get("DJS_WSL_DISTRO")),
-                   int(take(args, "--port", "7310")), flag(args, "--window"))
+                   int(take(args, "--port", "7310")), flag(args, "--window"), unit=unit)
     keep, no_deck = flag(args, "--keep"), flag(args, "--no-deck")
     network_picker = flag(args, '--network-picker')
     network_choice = take(args, '--network')
@@ -400,14 +419,19 @@ def main():
             bench_request(bench_url, 'api/state')
         except ValueError as error:
             sys.exit(str(error))
+    if "--list-audio" not in args and emu.other_running():
+        sys.exit("The other unit is running in this slot. Select that unit to stop it first.")
     if args[:1] == ["stop"]:
-        was = emu.running()
+        was = emu.starting()
         emu.stop()
         print("Emulator stopped." if was else "No emulator was running.")
         return 0
     if args[:1] == ["status"]:
         if not emu.running():
-            print("The emulator is not running.")
+            if emu.starting():
+                print("The emulator is waiting for the official application.")
+            else:
+                print("The emulator is not running.")
         elif emu.alive():
             print("The emulator is running.")
         else:
@@ -462,18 +486,19 @@ def main():
                 "emulator, which passes it a copy of what it hears and sends: it shows the DJS and your players, and "
                 'takes nothing meant for the DJS. It presses no buttons on them: give the adapter a second address for '
                 'that (docs/running.md). --no-bench leaves it out.')
-    ours = not emu.running()
-    if not ours and not emu.network_matches(network_command):
+    official_running = emu.running()
+    ours = not official_running and not emu.starting()
+    if official_running and not emu.network_matches(network_command):
         sys.exit('Network selection changed. Save your project, run start.py stop, then start again.')
-    if not ours and not emu.alive():
+    if official_running and not emu.alive():
         say("An emulator is running but not answering. Restarting it.")
         emu.stop()
         ours = True
-    elif not ours and emu.stale():
+    elif official_running and emu.stale():
         say("The running emulator is older than its shim (shim/djsdev.c changed). Restarting it.")
         emu.stop()
         ours = True
-    if not ours and 'DJSDEV_TAP=' in emu.env and not emu.feeds():
+    if official_running and not ours and 'DJSDEV_TAP=' in emu.env and not emu.feeds():
         say("The running emulator was started without its copy of the link, so Deckbench will show no device. Save "
             "your project, run start.py stop, then start again.")
     if ours:
@@ -490,7 +515,7 @@ def main():
     else:
         say("Using the emulator that is already running.")
     if no_deck:
-        say("Emulator left running. Stop it with: start.py stop")
+        say("Emulator left running. Stop it with start.py --unit %s stop." % unit)
         return 0
     say("Deck open. The app takes about half a minute to start. Close the deck to quit.")
     try:
@@ -502,7 +527,7 @@ def main():
             say("No Deckbench, as asked: only real players on the network are seen." if no_bench or bench_url == '' else
                 "No Deckbench: %s" % emu.bench_why)
         code = subprocess.call([sys.executable, os.path.join(REPO, "app", "virtual_djs.py"),
-                                "--port", str(emu.port), "--bench", bench or '',
+                                "--unit", unit, "--port", str(emu.port), "--bench", bench or '',
                                 '--network-command', json.dumps(network_command)] + (["--usb", usb] if usb else [])
                                 + (["--modlist", modlist] if modlist else []) + args)
     except KeyboardInterrupt:
@@ -511,7 +536,7 @@ def main():
         emu.stop()
         say("Deck closed. Emulator stopped.")
     else:
-        say("Emulator left running. Stop it with: start.py stop")
+        say("Emulator left running. Stop it with start.py --unit %s stop." % unit)
     return code
 
 

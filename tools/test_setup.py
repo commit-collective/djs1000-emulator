@@ -27,7 +27,7 @@ class Setup(unittest.TestCase):
         self.update = self.root / "synthetic.UPD"
         self.key.write_text("synthetic test fixture, not a key")
         self.update.write_text("synthetic test fixture, not firmware")
-        self.env = dict(os.environ, DJS_HOME=str(self.destination),
+        self.env = dict(os.environ, DJS_HOME=str(self.destination), DJSDEV_UNIT="djs1000",
                         PATH=str(self.bin) + os.pathsep + os.environ["PATH"])
         self.tool("python3", "touch update.iso\n")
         self.tool("7z", "mkdir -p iso/images\nprintf test > iso/images/release.txt\n")
@@ -38,8 +38,8 @@ class Setup(unittest.TestCase):
         self.tool("tar", '''case "$2" in
     *pdj.tar.gz)
         mkdir -p "$4/pdj"
-        touch "$4/pdj/EP113_Main_R"
-        chmod +x "$4/pdj/EP113_Main_R"
+        touch "$4/pdj/${TEST_APP:-EP113_Main_R}"
+        chmod +x "$4/pdj/${TEST_APP:-EP113_Main_R}"
         exit 0
         ;;
 esac
@@ -59,10 +59,24 @@ fi
         path.write_text("#!/bin/bash\nset -eu\n" + body)
         path.chmod(0o755)
 
-    def run_setup(self, rebuild=False):
+    def run_setup(self, rebuild=False, unit=None):
         command = ["bash", str(SCRIPT)] + (["--rebuild"] if rebuild else [])
+        if unit:
+            command += ["--unit", unit]
         return subprocess.run(command + [str(self.update), str(self.key)], env=self.env,
                               capture_output=True, text=True, timeout=15)
+
+    def test_sp16_setup_accepts_the_sp16_app(self):
+        self.env["TEST_APP"] = "EP085_Main_R"
+        run = self.run_setup(unit="sp16")
+        self.assertEqual(run.returncode, 0, run.stdout + run.stderr)
+        self.assertTrue((self.destination / "root/root/pdj/EP085_Main_R").is_file())
+
+    def test_sp16_setup_does_not_publish_a_djs_root(self):
+        run = self.run_setup(unit="sp16")
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("no EP085_Main_R in the update", run.stderr)
+        self.assertFalse((self.destination / "root").exists())
 
     def existing(self):
         app = self.destination / "root" / "root" / "pdj"

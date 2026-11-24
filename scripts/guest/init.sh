@@ -24,7 +24,10 @@
 #
 # run.sh has already opened autoexec.bin (the loop device it takes needs
 # root) and put what it holds on /mnt/iso, where the unit mounts it.
-APP=/root/pdj/EP113_Main_R
+case "${DJSDEV_UNIT:-djs1000}" in
+    sp16) APP=/root/pdj/EP085_Main_R ;;
+    *)    APP=/root/pdj/EP113_Main_R ;;
+esac
 USB=/media/usb1/sda1
 
 autoexec() {
@@ -70,16 +73,29 @@ unplug)
     ;;
 esac
 
-# A stick that is in at power-on is mounted, and its autoexec run, before
-# apl_start gets to the app. The queues keep what udev wrote for it.
-[ "$DJSDEV_USB" = 0 ] || plug
-cd /root/pdj
-if [ "$DJSDEV_DIRECT" = 1 ] && [ "$DJSDEV_USB" != 0 ] && [ -f /mnt/iso/autoexec.sh ]; then
-    echo "[djsemu] the stick's autoexec starts the app"
-else
+start_app() {
     echo "[djsemu] start $APP"
-    $APP &
+    (cd /root/pdj && exec "$APP") &
+}
+
+if [ "$DJSDEV_DIRECT" = 1 ] && [ "$DJSDEV_USB" != 0 ] && [ -f /mnt/iso/autoexec.sh ]; then
+    plug
+    echo "[djsemu] the stick's autoexec starts the app"
+elif [ "$APP" = /root/pdj/EP085_Main_R ] && [ "$DJSDEV_USB" != 0 ] && [ -f /mnt/iso/autoexec.sh ]; then
+    # Give SP-16 launchers an official process to stop before they take over
+    # the screen and panel. They may start the official app again later.
+    start_app
+    for attempt in 1 2 3; do
+        pidof "${APP##*/}" >/dev/null && break
+        sleep 1
+    done
+    plug
+else
+    # The DJS power-on hook runs before the official app starts.
+    [ "$DJSDEV_USB" = 0 ] || plug
+    start_app
 fi
+cd /root/pdj
 
 # The stick's autoexec leaves the restart of the app (with the mods) to a copy of itself, detached. On this
 # emulator that copy has now and then died without a word, and the app ran without the mods. So: if the mods
@@ -93,7 +109,7 @@ if [ "$DJSDEV_USB" != 0 ] && [ -f /mnt/iso/autoexec.sh ]; then
             [ -f /tmp/djs1000-mods/libmods.so ] || break
             # any of the app's processes (qemu, its wrapper, one on its way out) having the mods is enough
             have=0
-            for pid in $(pidof EP113_Main_R); do
+            for pid in $(pidof "${APP##*/}"); do
                 grep -q libmods.so "/proc/$pid/maps" 2> /dev/null && have=1
             done
             [ $have = 1 ] && break

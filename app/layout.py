@@ -15,6 +15,7 @@ and seeing which lamp answered.
 
 from dataclasses import dataclass
 
+MODEL = "DJS-1000"
 W, H = 1500, 1950
 
 LCD = (388, 88, 1100, 515)              # 712 x 427: the panel's 5:3
@@ -93,6 +94,12 @@ class Knob:
     gain: bool = False                  # the deck's own: the level of the input it sends
     look: str = "knob"                  # knob (an encoder), selector, pot
     at: int = 0                         # a pot's position at start, 0-POT_STEPS
+
+    reverse: bool = False               # the ADC word falls as the knob turns up
+
+    def wire_value(self, step):
+        value = step * 1023 // POT_STEPS
+        return 1023 - value if self.reverse else value
 
     def hit(self, x, y):
         cx, cy, r = self.circle

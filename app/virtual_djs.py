@@ -65,16 +65,18 @@ sys.path.insert(0, HERE)
 
 import art  # noqa: E402
 import audio  # noqa: E402
-import layout as L  # noqa: E402
+import layout  # noqa: E402
+import layout_sp16  # noqa: E402
 from link import Link  # noqa: E402
 from bench import request as bench_request, slot_ports  # noqa: E402
 import network_picker  # noqa: E402
 from mods import Mods, stick_file  # noqa: E402
 from capture import AUDIO_BITRATE, Capture  # noqa: E402
 
+L = layout
+
 CAPTURES = os.path.join(os.path.dirname(HERE), "demo", "captures")      # where REC puts its files (demo/ is git-ignored: media is never committed)
 
-TITLE = "Virtual DJS-1000"
 BG = (5, 5, 5)
 DOCK_PAD = 16
 SECTION_GAP = 18                         # between the large screen and the mods, and between the sections of the side panel (a recording keeps 8)
@@ -102,6 +104,9 @@ HELP = (                                 # the side panel's reminder: (keys, wha
     ("F10   F12", "hide this panel   \u00b7   lamp diagnostics"),
     ("F7   F8   F9", "record the window   \u00b7   tools menu   \u00b7   hide or show the status line"),
 )
+HELP_SP16 = HELP[:1] + (
+    ("Right-click", "pad, step key: hold it down (click to let go)   |   strip: leave a finger on it"),
+) + HELP[2:6] + (("H  M  C  G", "HOME   MODE   SCENE   PATTERN"),) + HELP[7:]
 DRAG_PX = 7                              # mouse travel for one encoder step
 
 # Keyboard keys for controls that are not drawn as a Key or Knob.
@@ -120,6 +125,12 @@ EXTRA_KEYS = {
 }
 KEYCAPS = {"Esc": pygame.K_ESCAPE, "-": pygame.K_MINUS, "Space": pygame.K_SPACE,
            "Left Shift": pygame.K_LSHIFT}
+
+
+def set_unit(unit):
+    global L
+    L = layout_sp16 if unit == "sp16" else layout
+    art.set_layout(L)
 
 
 def edge(h):
@@ -443,7 +454,7 @@ class Deck:
         self.listen_rect = pygame.Rect(0, 0, 0, 0)
         pygame.display.set_icon(self.icon())
         self.win = pygame.display.set_mode(size, pygame.RESIZABLE)
-        pygame.display.set_caption(TITLE)
+        pygame.display.set_caption(f"Virtual {L.MODEL}")
         self.font = pygame.font.SysFont("arial", 14)
         self.small = pygame.font.SysFont("arial", 11)
         self.screen = pygame.Surface((L.LCD_W, L.LCD_H)).convert()
@@ -466,6 +477,7 @@ class Deck:
         self.sprites = {}
         self.unknown = L.unknown_bits()
         self.keymap = self._keymap()
+        self.help = HELP_SP16 if L is layout_sp16 else HELP
         self.layout()
 
     def _keymap(self):
@@ -490,7 +502,7 @@ class Deck:
         self.ox = self.edge or 0                      # where the unit begins
         self.face = surface(art.face(self.scale))
         self.lift_face = self.lift_layer(art.face_alpha(self.scale)) if self.lift else None
-        self.cap = surface(art.slider_cap(self.scale))
+        self.cap = surface(art.slider_cap(self.scale)) if L.SLIDER else None
         self.sprites.clear()
         x0, y0, x1, y1 = (int(v * self.scale) for v in L.LCD)
         self.lcd_rect = pygame.Rect(x0 + self.ox, y0, x1 - x0, y1 - y0)
@@ -798,9 +810,10 @@ class Deck:
         if pos[0] >= self.ox + self.face_w:
             return None
         x, y = self.to_units(pos)
-        fx0, fy0, fx1, fy1 = L.SLIDER_FRAME
-        if fx0 <= x <= fx1 and fy0 <= y <= fy1:
-            return ("slider",)
+        if L.SLIDER_FRAME:
+            fx0, fy0, fx1, fy1 = L.SLIDER_FRAME
+            if fx0 <= x <= fx1 and fy0 <= y <= fy1:
+                return ("slider",)
         sx0, sy0, _, sy1 = L.STRIP
         if sx0 + 14 <= x <= sx0 + 96 and sy0 <= y <= sy1:
             return ("strip",)
@@ -887,7 +900,7 @@ class Deck:
         if knob.look == "pot":
             self.knob_step[i] = max(0, min(L.POT_STEPS, self.knob_step[i]))
             if knob.word is not None:
-                self.link.send(f"word {knob.word} {self.knob_step[i] * 1023 // L.POT_STEPS}")
+                self.link.send(f"word {knob.word} {knob.wire_value(self.knob_step[i])}")
             if knob.gain and self.recorder:
                 self.recorder.gain = self.knob_step[i] / L.POT_STEPS
         if knob.enc is not None:
@@ -905,7 +918,8 @@ class Deck:
                     self.slider = 0.5 if value == L.SLIDER_CENTRE else min(1.0, max(0.0, value / 1023))
                 for i, knob in enumerate(L.KNOBS):
                     if knob.word == word and knob.look == "pot":
-                        self.knob_step[i] = round(value * L.POT_STEPS / 1023)
+                        step = round(value * L.POT_STEPS / 1023)
+                        self.knob_step[i] = L.POT_STEPS - step if knob.reverse else step
             elif part[0] == "enc" and len(part) == 3:
                 for i, knob in enumerate(L.KNOBS):
                     if knob.enc == int(part[1]):
@@ -922,9 +936,10 @@ class Deck:
         what the panel tells it."""
         for i, knob in enumerate(L.KNOBS):
             if knob.word is not None:
-                self.link.send(f"word {knob.word} {self.knob_step[i] * 1023 // L.POT_STEPS}")
-        self.link.send(f"word {L.SLIDER_REF} {L.SLIDER_CENTRE}")
-        self.link.send(f"word {L.SLIDER_WORD} {self.slider_value()}")
+                self.link.send(f"word {knob.word} {knob.wire_value(self.knob_step[i])}")
+        if L.SLIDER:
+            self.link.send(f"word {L.SLIDER_REF} {L.SLIDER_CENTRE}")
+            self.link.send(f"word {L.SLIDER_WORD} {self.slider_value()}")
 
     def slider_value(self):
         if abs(self.slider - 0.5) < 0.012:   # the centre click
@@ -1269,10 +1284,10 @@ class Deck:
                             int(58 * self.scale), max(3, int(10 * self.scale)))
             pygame.draw.rect(win, (255, 190, 60) if self.pinned else (150, 200, 255), r,
                              border_radius=3)
-        cap = self.cap
-        sx, st, sb = L.SLIDER
-        win.blit(cap, cap.get_rect(center=(self.ox + int(sx * self.scale),
-                                           int((st + (sb - st) * self.slider) * self.scale))))
+        if self.cap:
+            sx, st, sb = L.SLIDER
+            win.blit(self.cap, self.cap.get_rect(center=(self.ox + int(sx * self.scale),
+                                                        int((st + (sb - st) * self.slider) * self.scale))))
         self.key_rects = []
         if self.dock:
             self.draw_dock()
@@ -1366,7 +1381,7 @@ class Deck:
         if self.mods.items:
             sections.append(("mods", "Installed mods (USB)", "click a switch - takes effect as the app runs",
                              sum(h for _, _, h in self.mod_rows()) + DETAIL_H + 8, self.draw_mods_body))
-        sections.append(("help", "Controls", "", len(HELP) * 24 + 4, self.draw_help_body))
+        sections.append(("help", "Controls", "", len(self.help) * 24 + 4, self.draw_help_body))
         free = bottom - y - HEAD * len(sections) - gap * (len(sections) - 1)
         views = {}
         open_ = [s for s in sections if not self.fold[s[0]]]
@@ -1564,7 +1579,7 @@ class Deck:
 
     def draw_help_body(self, x, y, width, clip):
         win = self.win
-        for i, (keys, what) in enumerate(HELP):
+        for i, (keys, what) in enumerate(self.help):
             cy = y + i * 24
             if cy + 20 < clip.top or cy > clip.bottom:
                 continue
@@ -1781,6 +1796,7 @@ class Deck:
 
 def main():
     ap = argparse.ArgumentParser(description=__doc__.splitlines()[0])
+    ap.add_argument("--unit", choices=("djs1000", "sp16"), default="djs1000", help="virtual deck layout")
     ap.add_argument("--host", default="127.0.0.1", help="backend address (default 127.0.0.1)")
     ap.add_argument('--network-command', help=argparse.SUPPRESS)
     ap.add_argument("--port", type=int, default=7310, help="deck link port (default 7310)")
@@ -1843,6 +1859,7 @@ def main():
     ap.add_argument("--snapshot", metavar="PNG",
                     help="draw one frame after a few seconds, save it and quit")
     args = ap.parse_args()
+    set_unit(args.unit)
 
     pygame.init()
     if args.list_audio:
@@ -1873,6 +1890,8 @@ def main():
             phones.feed(data)
     desk_w, desk_h = pygame.display.get_desktop_sizes()[0]
     h = args.height or min(desk_h - 110, 1060)
+    if L is layout_sp16 and not args.height:
+        h = min(h, (desk_w - 64) * L.H // L.W + STATUS_H)
     face_w = int(L.W * (h - STATUS_H) / L.H)
     margin = 0 if args.record else edge(h)
     w = face_w + 2 * margin if args.compact else min(desk_w - 40, margin + face_w + L.LCD_W + DOCK_PAD + margin + 1)
@@ -1980,7 +1999,7 @@ def main():
                     deck.mods.toggle(command[1].strip())
                 elif command[0] == "page" and len(command) > 1:
                     deck.mod_page = command[1].strip() == "mods"
-                elif command[0] == "slider" and len(command) > 1:      # `slider POS`: the tempo slider, 0 at the top to 1 at the foot
+                elif command[0] == "slider" and len(command) > 1 and L.SLIDER:      # `slider POS`: the tempo slider, 0 at the top to 1 at the foot
                     deck.slider = min(1.0, max(0.0, float(command[1])))
                     deck.link.send(f"word {L.SLIDER_WORD} {deck.slider_value()}")
                 elif command[0] == "key" and len(command) > 1:         # `key NAME 1|0`: a key held down or let go, as the mouse does

@@ -2,14 +2,37 @@
 
 ## Your firmware and key
 
-Supply your own firmware 1.22 update and the key needed to open it.
+Supply your own DJS-1000 1.22 or TORAIZ SP-16 1.60 firmware update and
+the key needed to open it.
 The unit stores its key on its own system. Obtain it only by means you are
 entitled to use, for example from a unit you own. Do not share
 it in issues or commits. This project does not distribute it.
 
 Setup keeps a private-readable copy at `$DJS_HOME/aes256.key`.
-`DJS_HOME` defaults to `~/djs`. The firmware root and working data stay there,
+`DJS_HOME` defaults to `~/djs` for DJS-1000 and `~/sp16` for SP-16.
+The firmware root and working data stay there,
 outside the checkout. Use a Linux filesystem, not a Windows shared folder.
+
+## TORAIZ SP-16
+
+Run setup in Linux or WSL, then run the launcher on the host.
+
+```sh
+bash scripts/setup.sh --unit sp16 /path/to/TORAIZSP16.UPD /path/to/aes256.key
+python start.py --unit sp16
+python start.py --unit sp16 stop
+```
+
+Use `--unit sp16` for `status` and `stop` as well as for starting the
+deck. The USB folder is `~/sp16/usb` by default. SP-16 and DJS-1000 use
+separate firmware and settings folders, and share the default deck port
+7310. Stop the running unit before starting the other in the same slot.
+
+The SP-16 deck plays the stock app's master stereo pair in the default
+output mode and accepts stereo input from the host. When the firmware
+sends sound to its phones PCM, the deck can play it as a second stereo
+output. Assignable outputs terminate at the backend and the analog filter
+return supplies silence. See [the SP-16 audio profile](emulation.md#sp-16-profile).
 
 ## Linux and Windows
 

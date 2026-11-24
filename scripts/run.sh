@@ -1,7 +1,7 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# Run the DJS-1000 app (EP113_Main_R) under qemu-arm user mode, in the rootfs
+# Run the selected sampler app under qemu-arm user mode, in the rootfs
 # scripts/setup.sh assembled in $DJS_HOME (default ~/djs), with the djsdev shim
 # standing in for the board's devices. The app draws on a display of its own
 # (Xvfb) that nobody sees: the virtual deck shows its screen. With
@@ -15,7 +15,7 @@
 # to stdout/stderr. The panel command pipe is $DJS_HOME/root/tmp/djspanel.
 set -u
 REPO="$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")"
-DJS="${DJS_HOME:-$HOME/djs}"
+. "$REPO/scripts/unit.sh"
 ROOT=$DJS/root
 secs=${1:-60}
 shift || true
@@ -25,11 +25,11 @@ TAG="${DJSDEV_TAG:-}"
 export DJSDEV_TAG="$TAG"
 . "$REPO/scripts/guest-pids.sh"
 
-if [ -n "$(pids_of /root/pdj/EP113_Main_R)" ]; then
+if [ -n "$(pids_of "(/root/pdj/|[.]/)EP(085|113)_Main_R|/opt/djsemu/init.sh")" ]; then
     echo "the emulator is already running: stop it first (python start.py stop)" >&2
     exit 1
 fi
-test -x "$ROOT/root/pdj/EP113_Main_R" || { echo "no rootfs in $ROOT: run scripts/setup.sh first" >&2; exit 1; }
+test -x "$ROOT$APP" || { echo "no rootfs in $ROOT: run scripts/setup.sh first" >&2; exit 1; }
 mkdir -p "$ROOT/opt/djsemu" "$ROOT/mnt/debug" "$ROOT/var/log" "$ROOT/root/data" "$ROOT/tmp" "$DJS/run"
 # What /root/pdj/apl_start does before it starts the app, as far as it applies
 # here: fresh browse/ and project/ working folders, and the mount points.
@@ -64,7 +64,7 @@ EMMC="${DJS_EMMC:-}"
 # The unit's /tmp is in RAM: empty at each start, with the USB message queues
 # the shim keeps there (see queue_put() in shim/djsdev.c).
 find "$ROOT/tmp" -mindepth 1 -delete
-arm-linux-gnueabihf-gcc -O2 -fPIC -shared -nostdlib -mfloat-abi=softfp -marm \
+arm-linux-gnueabihf-gcc -O2 -fPIC -shared -nostdlib -DDJSDEV_SP16="$SP16" -mfloat-abi=softfp -marm \
     -o "$ROOT/opt/djsemu/libdjsdev.so" "$REPO/shim/djsdev.c" \
     "$ROOT/lib/libdl.so.2" "$ROOT/lib/libc.so.6" "$ROOT/lib/libpthread.so.0" || exit 1
 
@@ -151,7 +151,7 @@ if [ $# -eq 0 ]; then
         gone=0
         while [ "$gone" -lt 25 ]; do
             sleep 1
-            if [ -n "$(pids_of /root/pdj/EP113_Main_R)" ]; then
+            if [ -n "$(pids_of "$APP_PATTERN")" ]; then
                 seen=1
                 gone=0
             elif [ "$seen" = 1 ]; then
@@ -163,11 +163,11 @@ if [ $# -eq 0 ]; then
     WATCH_PID=$!
 else
     QARGS="$*"
-    set -- /root/pdj/EP113_Main_R
+    set -- "$APP"
 fi
 
 QENV="${TAG:+-E DJSDEV_TAG=$TAG }-E DISPLAY=${DISPLAY:-:0} -E HOME=/root -E PATH=/opt/djsemu/bin:/usr/bin:/bin:/usr/sbin:/sbin"
-QENV="$QENV -E LD_LIBRARY_PATH=/usr/lib:/lib -E LD_PRELOAD=/opt/djsemu/libdjsdev.so $XDISPLAY"
+QENV="$QENV -E LD_LIBRARY_PATH=/usr/lib:/lib -E LD_PRELOAD=/opt/djsemu/libdjsdev.so -E DJSDEV_UNIT=${DJSDEV_UNIT:-djs1000} $XDISPLAY"
 [ -n "${DJSDEV_USB:-}" ] && QENV="$QENV -E DJSDEV_USB=$DJSDEV_USB"
 [ -n "${DJSDEV_DIRECT:-}" ] && QENV="$QENV -E DJSDEV_DIRECT=$DJSDEV_DIRECT"
 for name in DJSDEV_INTERFACE DJSDEV_ADDRESS DJSDEV_NETMASK DJSDEV_BROADCAST DJSDEV_IFINDEX DJSDEV_TAP; do

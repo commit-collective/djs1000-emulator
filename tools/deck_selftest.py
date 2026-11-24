@@ -19,7 +19,6 @@ sys.path.insert(0, os.path.join(HERE, "..", "app"))
 import pygame  # noqa: E402
 
 import art  # noqa: E402
-import layout as L  # noqa: E402
 import virtual_djs  # noqa: E402
 
 
@@ -44,15 +43,15 @@ class FakePlayer:
         pass
 
 
-def sweep_art():
+def sweep_art(layout):
     """The face and every sprite at many sizes of window, in the style set: a shape that is less than a pixel at a small size
     must not raise (a window the size of the user's did, once)."""
     for scale in (0.2, 0.25, 0.3, 0.35, 0.4, 0.45, 0.5, 0.55, 0.6, 0.7, 0.8, 0.9, 1.0, 1.2, 1.5):
         art.face(scale)
-        for i in range(len(L.KEYS)):
+        for i in range(len(layout.KEYS)):
             for level, rgb, down in ((0, None, False), (2, None, True), (0, (250, 120, 40), False)):
                 art.key_sprite(i, scale, level, rgb, down)
-        for i in range(len(L.KNOBS)):
+        for i in range(len(layout.KNOBS)):
             art.knob_sprite(i, scale, 3, False)
             art.knob_sprite(i, scale, 3, True)
         art.slider_cap(scale)
@@ -61,14 +60,17 @@ def sweep_art():
 def main():
     pygame.init()
     link = FakeLink()
-    for style in ("flat", "real"):
-        art.set_style(style)
-        sweep_art()
-        deck_checks(link)
+    for unit in ("djs1000", "sp16"):
+        virtual_djs.set_unit(unit)
+        layout = virtual_djs.L
+        for style in ("flat", "real"):
+            art.set_style(style)
+            sweep_art(layout)
+            deck_checks(link, layout)
     print(len(link.sent), "commands sent; ok")
 
 
-def deck_checks(link):
+def deck_checks(link, layout):
     for size in ((1627, 1060), (700, 900), (420, 500)):
         deck = virtual_djs.Deck(link, size, (FakePlayer(), None), None, [0])
         deck.pump()
@@ -78,10 +80,12 @@ def deck_checks(link):
         assert link.sent[sent:] == ["enc 0 -1"], link.sent[sent:]
         k, ox = deck.scale, deck.ox                      # the unit begins ox from the window's edge
         points = [((key.bounds()[0] + key.bounds()[2]) / 2 * k + ox, (key.bounds()[1] + key.bounds()[3]) / 2 * k)
-                  for key in L.KEYS]
-        points += [(knob.circle[0] * k + ox, knob.circle[1] * k) for knob in L.KNOBS]
-        points += [(L.SLIDER[0] * k + ox, (L.SLIDER[1] + 40) * k), deck.listen_rect.center,
-                   deck.lcd_rect.center, ((L.STRIP[0] + 50) * k + ox, (L.STRIP[1] + 100) * k)]
+                  for key in layout.KEYS]
+        points += [(knob.circle[0] * k + ox, knob.circle[1] * k) for knob in layout.KNOBS]
+        if layout.SLIDER:
+            points.append((layout.SLIDER[0] * k + ox, (layout.SLIDER[1] + 40) * k))
+        points += [deck.listen_rect.center, deck.lcd_rect.center,
+                   ((layout.STRIP[0] + 50) * k + ox, (layout.STRIP[1] + 100) * k)]
         if deck.dock:
             points.append(deck.dock.center)
         points += [(x, y) for x in range(0, size[0], 53) for y in range(0, size[1], 47)]

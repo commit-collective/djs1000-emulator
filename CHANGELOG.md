@@ -2,6 +2,10 @@
 
 Newest first. A release is a tagged commit.
 
+## Unreleased
+
+- Run TORAIZ SP-16 firmware 1.60 with its own virtual deck, panel and audio profile using `--unit sp16`.
+
 ## v0.4.0
 
 Tested on WSL2 with Ubuntu 24.04. The regression session comes out identical to the reference, the deck's self-test

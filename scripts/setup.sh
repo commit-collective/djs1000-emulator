@@ -1,14 +1,14 @@
 #!/bin/bash
 # SPDX-License-Identifier: GPL-2.0-or-later
 #
-# From a DJS-1000 update file to the root filesystem its application runs in.
+# From a sampler update file to the root filesystem its application runs in.
 #
-#   scripts/setup.sh [--rebuild] <DJS1000.UPD> [aes256.key]
+#   scripts/setup.sh [--rebuild] [--unit djs1000|sp16] <firmware.upd> [aes256.key]
 #
 # Decrypts the update, unpacks it, and assembles the unit's root filesystem
-# in $DJS_HOME (default ~/djs), which must be on a Linux filesystem: the
-# archives hold symlinks, device nodes and case-sensitive names. Nothing from
-# the update is written into this repository.
+# in $DJS_HOME, which defaults to ~/djs or ~/sp16. Use a Linux filesystem
+# for symlinks, device nodes and case-sensitive names. The update files stay
+# outside the checkout.
 #
 # The key file is the unit's own /usr/local/pdj/aes256.key, from a unit you
 # own: it is not part of this project. A copy is kept as $DJS_HOME/aes256.key
@@ -21,15 +21,19 @@
 # there).
 set -eu
 REPO="$(dirname "$(dirname "$(readlink -f "${BASH_SOURCE[0]}")")")"
-DJS="${DJS_HOME:-$HOME/djs}"
 REBUILD=0
 if [ "${1:-}" = --rebuild ]; then
     REBUILD=1
     shift
 fi
-UPD="${1:?usage: setup.sh <DJS1000.UPD> <aes256.key>}"
+if [ "${1:-}" = --unit ]; then
+    DJSDEV_UNIT="${2:?--unit needs djs1000 or sp16}"
+    shift 2
+fi
+. "$REPO/scripts/unit.sh"
+UPD="${1:?usage: setup.sh <firmware.upd> <aes256.key>}"
 KEY="${2:-$DJS/aes256.key}"
-test -f "$KEY" || { echo "no key file: usage: setup.sh <DJS1000.UPD> <aes256.key>" >&2; exit 1; }
+test -f "$KEY" || { echo "no key file: usage: setup.sh <firmware.upd> <aes256.key>" >&2; exit 1; }
 
 test -f "$UPD" || { echo "no update file: $UPD" >&2; exit 1; }
 
@@ -46,7 +50,7 @@ if [ -d "$DJS" ] && [ -n "$(find "$DJS" -mindepth 1 -maxdepth 1 ! -name '.setup.
         echo "$DJS is not empty. Use --rebuild to back up and replace its firmware files." >&2
         exit 1
     fi
-    if [ ! -f "$DJS/.djs1000-emu" ] && [ ! -f "$DJS/root/root/pdj/EP113_Main_R" ]; then
+    if [ ! -f "$DJS/.djs1000-emu" ] && [ ! -f "$DJS/root$APP" ]; then
         echo "$DJS is not a recognised installation. Choose an empty folder." >&2
         exit 1
     fi
@@ -104,7 +108,7 @@ done
 # The application, /root/pdj.
 tar xzf iso/images/pdj.tar.gz -C root/root
 
-test -x root/root/pdj/EP113_Main_R || { echo "no EP113_Main_R in the update?" >&2; exit 1; }
+test -x "root$APP" || { echo "no $APP_NAME in the update" >&2; exit 1; }
 
 # Only publish after extraction succeeds. Keep the old root, including settings.
 BACKUP="$(mktemp -d "$DJS/previous.XXXXXXXX")"
@@ -122,4 +126,4 @@ touch "$DJS/.djs1000-emu"
 echo "Previous files, if any: $BACKUP"
 cd "$DJS"
 echo "ready: $DJS/root ($(du -sh root | cut -f1)), firmware $(cat iso/images/release.txt 2>/dev/null)"
-echo "run it: $REPO/scripts/run.sh 600"
+echo "run it: DJSDEV_UNIT=${DJSDEV_UNIT:-djs1000} DJS_HOME=\"$DJS\" $REPO/scripts/run.sh 600"

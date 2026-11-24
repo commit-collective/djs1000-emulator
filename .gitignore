@@ -9,6 +9,7 @@
 *.tar.gz
 *.raw
 EP113_Main_R
+EP085_Main_R
 /rootfs/
 /extract/
 
