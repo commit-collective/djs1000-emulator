@@ -32,6 +32,8 @@ SLIDER = (1313, 860, 1320)              # x, top and bottom of the cap's travel
 # panel sends as the centre's.
 SLIDER_WORD, SLIDER_REF, SLIDER_CENTRE = 0x58, 0x56, 512
 STRIP = (122, 886, 238, 1296)           # the touch strip's well
+STRIP_TOUCH = (STRIP[0] + 26, STRIP[1] + 20, STRIP[0] + 84, STRIP[3] - 20)
+STRIP_HIT = (STRIP[0] + 14, STRIP[1], STRIP[0] + 96, STRIP[3])
 USB_PORT = (36, 160, 128, 245)
 
 WHITE = (235, 238, 245)

@@ -211,9 +211,15 @@ def _key_shape(c, key, fill, inset=0):
 
 
 def _symbol(c, key, color, s=1.0):
-    """The sign on a round key, s times its size."""
-    cx, cy, r = key.circle
-    if key.symbol == "play":
+    """Draw the transport sign at the center of the key."""
+    if key.circle:
+        cx, cy, _ = key.circle
+    else:
+        x0, y0, x1, y1 = key.box
+        cx, cy = (x0 + x1) / 2, (y0 + y1) / 2
+    if key.symbol == "play" and not key.circle:
+        c.poly([(cx - 9, cy - 8), (cx - 9, cy + 8), (cx + 11, cy)], color)
+    elif key.symbol == "play":
         c.poly([(cx - 20 * s, cy - 11 * s), (cx - 20 * s, cy + 11 * s), (cx - 3 * s, cy)], color)
         c.rect((cx + 4 * s, cy - 10 * s, cx + 9 * s, cy + 10 * s), fill=color)
         c.rect((cx + 14 * s, cy - 10 * s, cx + 19 * s, cy + 10 * s), fill=color)
@@ -275,7 +281,10 @@ def _draw_key(c, key, level, rgb, down):
         _key_shape(c, key, edge)
         _key_shape(c, key, _mix(KEY_FILL, lit, 0.25) if lit else KEY_FILL, inset=3)
         x0, y0, x1, y1 = key.box
-        c.text((x0 + x1) / 2, (y0 + y1) / 2, key.label, key.font, fill=lit or PRINT)
+        if key.symbol:
+            _symbol(c, key, lit or _mix(key.color, (0, 0, 0), 0.38))
+        else:
+            c.text((x0 + x1) / 2, (y0 + y1) / 2, key.label, key.font, fill=lit or PRINT)
         if down:
             _key_shape(c, key, (255, 255, 255, 60), inset=3)
     elif kind == "bar":
@@ -284,6 +293,9 @@ def _draw_key(c, key, level, rgb, down):
             c.glow(lambda g, f: _key_shape(g, key, f), lit, 5, 0.8)
         _key_shape(c, key, edge)
         _key_shape(c, key, (6, 6, 8) if not down else (60, 62, 70), inset=3)
+    elif kind == "led" and key.label:
+        x0, y0, x1, y1 = key.box
+        c.text((x0 + x1) / 2, (y0 + y1) / 2, key.label, key.font, fill=lit or (94, 98, 106))
     elif kind == "led":
         if lit:
             c.glow(lambda g, f: _key_shape(g, key, f), lit, 4, 0.9)
@@ -359,7 +371,7 @@ def key_sprite(index, scale, level=0, rgb=None, down=False):
 def _draw_knob(c, knob, angle, down=False):
     cx, cy, r = knob.circle
     if knob.look == "selector" and STYLE == "real":
-        c.circle(cx, cy, r + 26, fill=(7, 7, 8))
+        c.circle(cx, cy, r + (2 if L is layout_sp16 else 26), fill=(7, 7, 8))
         c.circle(cx, cy, r, fill=(120, 122, 128))                              # the chrome ring, the same all the way round
         c.circle(cx, cy, r - 1.5, fill=(226, 228, 233))
         c.circle(cx, cy, r - 6, fill=(196, 198, 204))
@@ -373,7 +385,7 @@ def _draw_knob(c, knob, angle, down=False):
         c.circle(cx, cy, r - 38, fill=(18, 18, 20))
         return
     if knob.look == "selector":
-        c.circle(cx, cy, r + 26, fill=(7, 7, 8))
+        c.circle(cx, cy, r + (2 if L is layout_sp16 else 26), fill=(7, 7, 8))
         c.circle(cx, cy, r, fill=(238, 240, 245))
         c.circle(cx, cy, r - 9, fill=(24, 24, 27) if not down else (50, 51, 56))
         for i in range(12):
@@ -519,23 +531,57 @@ def face_alpha(scale):
 
 
 def _sp16_face(c):
-    c.gradient_rect(L.BODY, 18, (49, 52, 58), (28, 30, 34), "v")
-    c.rect(L.BODY, radius=18, outline=(93, 98, 106), width=3)
-    c.rect(L.TOP_BLOCK, radius=14, fill=(12, 13, 16), outline=(87, 93, 104), width=3)
-    x0, y0, x1, y1 = L.LCD
-    c.rect((x0 - 12, y0 - 12, x1 + 12, y1 + 12), radius=8, fill=(2, 3, 4),
-           outline=(61, 67, 76), width=2)
+    real = STYLE == "real"
+    bx0, by0, bx1, by1 = L.BODY
+    if real:
+        c.gradient_rect(L.BODY, 9, (37, 37, 40), (27, 27, 30), "v")
+        c.rect(L.BODY, radius=9, outline=BODY_EDGE, width=2)
+        c.gradient_rect((bx0 + 2, by0 + 2, bx1 - 2, by0 + 28), 6, (17, 17, 19), (49, 49, 53))
+        c.line([(bx0 + 15, by0 + 28), (bx1 - 15, by0 + 28)], (86, 87, 92), 2)
+        c.gradient_rect((bx0 + 3, by1 - 65, bx1 - 3, by1 - 2), 6, (39, 39, 42), (24, 24, 27))
+        for x0, x1 in ((bx0 + 2, bx0 + 22), (bx1 - 22, bx1 - 2)):
+            c.gradient_rect((x0, by0 + 2, x1, by1 - 2), 5, (48, 48, 52), (14, 14, 17), "h")
+    else:
+        c.rect(L.BODY, radius=9, fill=BODY, outline=BODY_EDGE, width=2)
+
+    c.rect(L.TOP_BLOCK, radius=8, fill=GLOSS, outline=(98, 99, 104), width=3)
+    x0, y0, x1, y1 = L.TOP_BLOCK
+    if real:
+        c.gradient_rect((x0 + 4, y0 + 4, x1 - 4, y1 - 4), 6, (57, 57, 61), (10, 10, 12), "d")
+        c.line([(x0 + 7, y0 + 5), (x1 - 7, y0 + 5)], (111, 112, 117), 2)
     c.rect(L.LCD, fill=(0, 0, 0))
-    c.rect(L.USB_PORT, radius=5, fill=(20, 20, 23), outline=(119, 123, 129), width=4)
-    c.rect(L.PAD_FRAME, radius=12, fill=(10, 11, 13), outline=(91, 98, 110), width=3)
-    c.rect(L.STRIP, radius=8, fill=(12, 14, 17), outline=(73, 80, 91), width=3)
-    x0, y0, _, y1 = L.STRIP
-    c.gradient_rect((x0 + 25, y0 + 12, x0 + 87, y1 - 12), 5, (53, 58, 67), (27, 31, 38), "v")
-    for text in L.TEXTS:
-        c.text(text.x, text.y, text.text, text.size, fill=text.color, anchor=text.anchor)
+
+    c.rect(L.STRIP_PANEL, radius=7, fill=GLOSS, outline=(88, 89, 95), width=2)
+    if real:
+        x0, y0, x1, _ = L.STRIP_PANEL
+        c.shade_poly([(x0 + 4, y0 + 4), (x1 - 4, y0 + 4), (x1 - 4, y0 + 116),
+                      (x0 + 4, y0 + 168)], (255, 255, 255, 15), blur=3)
+    c.rect(L.STRIP, radius=5, fill=(8, 8, 10), outline=(101, 102, 108), width=2)
+    c.gradient_rect(L.STRIP_TOUCH, 3, (48, 49, 54), (26, 27, 31), "h")
+
+    c.rect(L.USB_PORT, radius=5, fill=(5, 5, 6), outline=(80, 82, 88), width=2)
+    x0, y0, x1, y1 = L.USB_PORT
+    c.gradient_rect((x0 + 5, y0 + 6, x1 - 5, y1 - 36), 3, (51, 52, 57), (14, 15, 18))
+    c.line([(x0 + 7, y1 - 33), (x1 - 7, y1 - 33)], (49, 50, 54), 2)
+
+    x0, y0, x1, y1 = L.FILTER_PANEL
+    c.line([(420, y0), (x0, y0), (x0, y1), (x1, y1), (x1, y0), (796, y0)], (142, 143, 148), 2)
+    c.line([(487, y0), (715, y0)], (142, 143, 148), 2)
+    c.line([(680, y0 + 13), (680, y1 - 13)], (142, 143, 148), 2)
     for knob in L.KNOBS:
+        cx, cy, r = knob.circle
         if knob.look == "knob":
             _draw_knob(c, knob, 0)
+        if knob.look == "pot":
+            for tick in range(9):
+                angle = math.radians(135 + tick * 270 / 8)
+                c.circle(cx + (r + 6) * math.cos(angle), cy + (r + 6) * math.sin(angle),
+                         1.8, fill=(163, 164, 171))
+
+    for x in L.STEP_X[::4]:
+        c.rect((x - 26, 785, x + 26, 801), outline=PRINT, width=1.5)
+    for text in L.TEXTS:
+        c.text(text.x, text.y, text.text, text.size, fill=text.color, anchor=text.anchor, bold=text.bold)
     for key in L.KEYS:
         _draw_key(c, key, 0, None, False)
 

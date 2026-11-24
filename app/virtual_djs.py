@@ -497,8 +497,12 @@ class Deck:
     def layout(self):
         w, h = self.win.get_size()
         self.scale = max(0.2, (h - STATUS_H) / L.H)
-        self.face_w = int(L.W * self.scale)
         self.edge = edge(h) if self.tidy else None
+        if L is layout_sp16:
+            # The SP-16 is wider than it is tall. Keep its full face visible on a narrow window.
+            available = max(1, w - 2 * (self.edge or 0))
+            self.scale = min(self.scale, available / L.W)
+        self.face_w = int(L.W * self.scale)
         self.ox = self.edge or 0                      # where the unit begins
         self.face = surface(art.face(self.scale))
         self.lift_face = self.lift_layer(art.face_alpha(self.scale)) if self.lift else None
@@ -814,8 +818,8 @@ class Deck:
             fx0, fy0, fx1, fy1 = L.SLIDER_FRAME
             if fx0 <= x <= fx1 and fy0 <= y <= fy1:
                 return ("slider",)
-        sx0, sy0, _, sy1 = L.STRIP
-        if sx0 + 14 <= x <= sx0 + 96 and sy0 <= y <= sy1:
+        sx0, sy0, sx1, sy1 = L.STRIP_HIT
+        if sx0 <= x <= sx1 and sy0 <= y <= sy1:
             return ("strip",)
         for i, knob in enumerate(L.KNOBS):
             if knob.hit(x, y):
@@ -879,7 +883,8 @@ class Deck:
             knob = L.KNOBS[what[1]]
             how = f"encoder {knob.enc}" if knob.enc is not None else \
                 f"frame word {knob.word:#x}" if knob.word is not None else \
-                "the level of the input the deck sends" if knob.gain else "not identified yet"
+                "the level of the input the deck sends" if knob.gain else \
+                "physical analog control" if L is layout_sp16 else "not identified yet"
             return "  ·  ".join(filter(None, [knob.name.replace("_", " "), how,
                                                  knob.keycap and f"keys {knob.keycap}"]))
         key = L.KEYS[what[1]]
@@ -949,7 +954,7 @@ class Deck:
     def stroke(self, pos):
         """A finger on the touch strip: 127 at the top (+) to 0 at the bottom."""
         _, y = self.to_units(pos)
-        top, bottom = L.STRIP[1] + 20, L.STRIP[3] - 20
+        _, top, _, bottom = L.STRIP_TOUCH
         self.strip = int(round(127 * min(1.0, max(0.0, (bottom - y) / (bottom - top)))))
         self.link.send(f"strip {self.strip}")
 
@@ -1278,10 +1283,10 @@ class Deck:
                 surf, x, y = self.sprite(art.knob_sprite, i, self.scale, self.knob_step[i], down)
                 win.blit(surf, (x + self.ox, y))
         if self.strip is not None:      # the finger on the strip
-            sx0, sy0, _, sy1 = L.STRIP
-            y = sy1 - 20 - (sy1 - sy0 - 40) * self.strip / 127
-            r = pygame.Rect(self.ox + int((sx0 + 26) * self.scale), int((y - 5) * self.scale),
-                            int(58 * self.scale), max(3, int(10 * self.scale)))
+            left, top, right, bottom = L.STRIP_TOUCH
+            y = bottom - (bottom - top) * self.strip / 127
+            r = pygame.Rect(self.ox + int(left * self.scale), int((y - 5) * self.scale),
+                            int((right - left) * self.scale), max(3, int(10 * self.scale)))
             pygame.draw.rect(win, (255, 190, 60) if self.pinned else (150, 200, 255), r,
                              border_radius=3)
         if self.cap:

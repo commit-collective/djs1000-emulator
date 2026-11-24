@@ -79,13 +79,21 @@ def deck_checks(link, layout):
         deck.wheel(deck.lcd_rect.center, -1)            # the wheel over the screen turns the selector, to browse
         assert link.sent[sent:] == ["enc 0 -1"], link.sent[sent:]
         k, ox = deck.scale, deck.ox                      # the unit begins ox from the window's edge
+        if layout.MODEL == "TORAIZ SP-16":
+            assert ox + deck.face.get_width() <= size[0]
+            for i, key in enumerate(layout.KEYS):
+                if key.kind != "led":
+                    x0, y0, x1, y1 = key.bounds()
+                    pos = (round((x0 + x1) / 2 * k + ox), round((y0 + y1) / 2 * k))
+                    assert deck.find(pos) == ("key", i), key.name
         points = [((key.bounds()[0] + key.bounds()[2]) / 2 * k + ox, (key.bounds()[1] + key.bounds()[3]) / 2 * k)
                   for key in layout.KEYS]
         points += [(knob.circle[0] * k + ox, knob.circle[1] * k) for knob in layout.KNOBS]
         if layout.SLIDER:
             points.append((layout.SLIDER[0] * k + ox, (layout.SLIDER[1] + 40) * k))
         points += [deck.listen_rect.center, deck.lcd_rect.center,
-                   ((layout.STRIP[0] + 50) * k + ox, (layout.STRIP[1] + 100) * k)]
+                   ((layout.STRIP_TOUCH[0] + layout.STRIP_TOUCH[2]) / 2 * k + ox,
+                    (layout.STRIP_TOUCH[1] + 100) * k)]
         if deck.dock:
             points.append(deck.dock.center)
         points += [(x, y) for x in range(0, size[0], 53) for y in range(0, size[1], 47)]

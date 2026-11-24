@@ -4,7 +4,7 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
-- Run TORAIZ SP-16 firmware 1.60 with its own virtual deck, panel and audio profile using `--unit sp16`.
+- Run TORAIZ SP-16 firmware 1.60 with `--unit sp16`, with the hardware layout on its virtual deck and a dedicated audio profile.
 
 ## v0.4.0
 
