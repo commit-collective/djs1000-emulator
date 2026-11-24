@@ -49,7 +49,9 @@ The SP-16 deck and shim use the same 128-byte panel frames and
 little-endian CRC as the DJS-1000. The SP-16 writes its input words
 big-endian, uses a 3 ms panel timer and packs mono lamp on and dim bits
 into separate fields. The controls use the SP-16's encoder, pot and pad
-offsets.
+offsets. At startup, the emulator creates a neutral `padcalibration.xml`
+in the SP-16 data directory when the file is missing.
+The stock firmware flashes all 16 pads red when it has no valid calibration.
 
 The SP-16 firmware opens these PCM streams at 44.1 kHz with 64-frame
 periods and two periods per buffer.

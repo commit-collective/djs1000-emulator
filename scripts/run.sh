@@ -35,20 +35,23 @@ mkdir -p "$ROOT/opt/djsemu" "$ROOT/mnt/debug" "$ROOT/var/log" "$ROOT/root/data" 
 # here: fresh browse/ and project/ working folders, and the mount points.
 rm -rf "$ROOT/root/pdj/browse" "$ROOT/root/pdj/project"
 mkdir -p "$ROOT/root/pdj/browse" "$ROOT/root/pdj/project" "$ROOT/mnt/usb" "$ROOT/mnt/emmc"
-# The pads' factory calibration, which lives on the unit's data partition:
-# for each pad, the sensor reading at which a hit begins (217-454). Without
-# it the app takes every pad as held down for ever, and blinks them all red.
+# The firmware expects per-pad calibration in the unit's data partition.
+# Supply neutral values for virtual pads when no calibration exists.
 # $DJS_DATA stands in for that partition (default: root/data in the rootfs).
-# A fresh folder is a unit with its settings as they left the factory.
 DATA="${DJS_DATA:-$ROOT/root/data}"
 mkdir -p "$DATA"
 CAL="$DATA/PadCalibration.xml"
+[ "$SP16" = 0 ] || CAL="$DATA/padcalibration.xml"
 if [ ! -s "$CAL" ]; then
     {
         printf '<?xml version="1.0" encoding="UTF-8"?>\n\n<PadCalibrationData'
-        for k in Final Provisional1 Provisional2 Provisional3; do
-            for n in $(seq -w 1 16); do printf ' Pad%s_%s="336"' "$n" "$k"; done
-        done
+        if [ "$SP16" = 1 ]; then
+            for n in $(seq 1 16); do printf ' CALIB_VALUE_PAD%s="242"' "$n"; done
+        else
+            for k in Final Provisional1 Provisional2 Provisional3; do
+                for n in $(seq -w 1 16); do printf ' Pad%s_%s="336"' "$n" "$k"; done
+            done
+        fi
         printf '/>\n'
     } > "$CAL"
 fi
