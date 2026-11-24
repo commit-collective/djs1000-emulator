@@ -93,6 +93,7 @@ MIN_HOLD = 120                           # ms a clicked key or pad stays down at
 BOOT_S = 24                              # about how long the app takes to draw its first screen
 HELP = (                                 # the side panel's reminder: (keys, what they do)
     ("Mouse", "press keys and pads, drag or wheel knobs, touch the screen"),
+    ("Scroll empty space", "Turn the browse selector"),
     ("Right-click", "pad, step key: hold it down (click to let go)   \u00b7   strip: leave a finger on it   \u00b7   tempo slider: centre"),
     ("Space  B  N", "PLAY/PAUSE   STOP   REC"),
     ("\u2191 \u2193   Enter   \u2190", "selector: turn, push   \u00b7   BACK (also Esc)"),
@@ -104,9 +105,9 @@ HELP = (                                 # the side panel's reminder: (keys, wha
     ("F10   F12", "hide this panel   \u00b7   lamp diagnostics"),
     ("F7   F8   F9", "record the window   \u00b7   tools menu   \u00b7   hide or show the status line"),
 )
-HELP_SP16 = HELP[:1] + (
+HELP_SP16 = HELP[:2] + (
     ("Right-click", "pad, step key: hold it down (click to let go)   |   strip: leave a finger on it"),
-) + HELP[2:6] + (("H  M  C  G", "HOME   MODE   SCENE   PATTERN"),) + HELP[7:]
+) + HELP[3:7] + (("H  M  C  G", "HOME   MODE   SCENE   PATTERN"),) + HELP[8:]
 DRAG_PX = 7                              # mouse travel for one encoder step
 
 # Keyboard keys for controls that are not drawn as a Key or Knob.
