@@ -32,6 +32,13 @@
 - `tools/reel.py`: the same idea for short vertical videos (1080x1920): an episode (start from `tools/reels/example.py`) says the
   scenes, their captions and what is played in them, and the tool writes the picture with and without text, an SRT and a cover.
   See [reels.md](reels.md).
+- `tools/freesp16_smoke.py --freesp16 PATH`: freesp16's own emulator smoke test, run here (SP-16 or `--unit djs1000`,
+  in a slot of its own, 47 by default). It puts the boot menu, the freesp16 build and its test kit on the slot's stick,
+  hits the 16 pads while recording MAIN, and checks the sound with freesp16's `tools/analyze-wav.py` and the app's log
+  for xruns. `--tone` checks the test tone instead. It takes only a new slot or one it made (it marks the home), never
+  one that runs or whose port answers, nor 10, 20 or 30, and it ignores `DJS_USB`. A run with no screen from the app
+  fails. The output goes in `demo/freesp16-smoke`. Its screenshots show
+  800x480 of the app's larger screen (`session.py` takes the stock app's size).
 - `tools/deck_selftest.py`: presses, drags and releases the mouse on every
   control of the virtual deck with no app running, in both faces (`flat` and `real`), and draws the face and every key at many
   sizes of window. Run it after changing `app/`.
