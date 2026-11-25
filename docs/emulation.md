@@ -127,9 +127,13 @@ The emulator does the same with the USB folder's `autoexec.bin`:
   command pipe runs it again before the mount is announced, as plugging the
   stick in does.
 - The app is started once and not watched on the unit, so an autoexec may
-  stop it and start it again. The emulator ends only when no app has run for
-  five seconds. `pidof` and `killall` in `/opt/djsemu/bin` find the unit's
-  programs, which `/proc` here names `qemu-arm-static`.
+  stop it and start it again. The emulator ends only when neither the app nor
+  a boot menu from the stick (`/tmp/bootmenu`) has run for 25 seconds.
+  `pidof` and `killall` in `/opt/djsemu/bin` find the unit's programs, which
+  `/proc` here names `qemu-arm-static`.
+- The guest has a PID namespace of its own, so its `/proc` shows only its own
+  processes. A program that stops the app by name never reaches another
+  slot's.
 - With extra qemu arguments (`-g` for gdb) `run.sh` starts the app alone, as
   before.
 

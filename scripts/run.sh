@@ -148,13 +148,15 @@ if [ $# -eq 0 ]; then
     # The emulator ends when the app has: none seen for 25 seconds, once
     # one has been (an autoexec may stop the app to start it again, which
     # on a cold or busy machine takes more than the five seconds it took
-    # once: the emulator was then ended in the middle of the restart).
+    # once: the emulator was then ended in the middle of the restart). A
+    # boot menu from the stick (/tmp/bootmenu) counts as the app: it stops
+    # the app and shows itself, for as long as the user takes.
     (
         seen=0
         gone=0
         while [ "$gone" -lt 25 ]; do
             sleep 1
-            if [ -n "$(pids_of "$APP_PATTERN")" ]; then
+            if [ -n "$(pids_of "$APP_PATTERN|/tmp/bootmenu/.*")" ]; then
                 seen=1
                 gone=0
             elif [ "$seen" = 1 ]; then
@@ -180,21 +182,25 @@ done
 # The unit's console (its serial port), where a process started by a stick's
 # autoexec may send its output: a file here, $DJS_HOME/run/console.log.
 : > "$DJS/run/console.log"
-if [ -z "${DJS_PROOT:-}" ] && unshare -rm true 2> /dev/null; then
+if [ -z "${DJS_PROOT:-}" ] && unshare -rmpf true 2> /dev/null; then
     # Without proot: a chroot in a user namespace of our own (no root needed), unless DJS_PROOT is set or user
     # namespaces are not allowed. proot stops the guest at every system call and the app makes very many: the app is
     # ready in 17 s here, against 45 s. The same places are bound. The
     # processes of the guest under qemu are the kernel's (binfmt_misc), and carry the tag in their environment.
+    # The guest has a PID namespace of its own: its /proc shows only its processes, so what it stops by name (a boot
+    # menu stopping the official app) is never another slot's. Its first process, bash, reaps the orphans, and the
+    # whole guest ends with it.
     export ROOT USB DATA AUTO EMMC QENV QARGS DJS DJSDEV_TAG="${TAG:-}"
     mkdir -p "$ROOT/tmp/.X11-unix" "$ROOT/dev" "$ROOT/proc" "$ROOT/sys" "$ROOT/media/usb1/sda1" "$ROOT/root/data" "$ROOT/mnt/iso"
     install -m 755 "$(command -v qemu-arm-static)" "$ROOT/usr/bin/qemu-arm-static"
-    timeout "$secs" unshare -rm bash -c '
+    timeout "$secs" unshare -rmpf --kill-child bash -c '
         mount --rbind /dev "$ROOT/dev" && mount --bind "$DJS/run/console.log" "$ROOT/dev/console" &&
-        mount --rbind /proc "$ROOT/proc" && mount --rbind /sys "$ROOT/sys" &&
+        mount -t proc proc "$ROOT/proc" && mount --rbind /sys "$ROOT/sys" &&
         mount --rbind /tmp/.X11-unix "$ROOT/tmp/.X11-unix" && mount --bind "$USB" "$ROOT/media/usb1/sda1" &&
         mount --bind "$DATA" "$ROOT/root/data" && mount --bind "$AUTO" "$ROOT/mnt/iso" &&
         { [ -z "$EMMC" ] || mount --bind "$EMMC" "$ROOT/mnt/emmc"; } || exit 1
-        exec chroot "$ROOT" /bin/sh -c '"'"'cd /root/pdj && exec /usr/bin/qemu-arm-static $QENV $QARGS "$@"'"'"' sh "$@"
+        chroot "$ROOT" /bin/sh -c '"'"'cd /root/pdj && exec /usr/bin/qemu-arm-static $QENV $QARGS "$@"'"'"' sh "$@"
+        exit $?
     ' sh "$@"
 else
 timeout "$secs" proot -q "qemu-arm-static $QENV $QARGS" -r "$ROOT" \

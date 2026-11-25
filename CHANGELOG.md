@@ -6,6 +6,11 @@ Newest first. A release is a tagged commit.
 
 - Run TORAIZ SP-16 firmware 1.60 with `--unit sp16`, with the hardware layout on its virtual deck, dedicated audio and Pro DJ Link sync.
 
+### Fixes
+
+- A boot menu from the stick that stopped the app no longer ends the emulator after 25 seconds, with its screen.
+- Each slot's guest sees only its own processes, so a boot menu in one slot no longer stops the app in the others.
+
 ## v0.4.0
 
 Tested on WSL2 with Ubuntu 24.04. The regression session comes out identical to the reference, the deck's self-test
