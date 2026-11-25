@@ -94,6 +94,8 @@ class Emulator:
         self.prelude += f'APP_NAME={app_name}\nAPP_PATTERN="(/root/pdj/|[.]/)$APP_NAME"\n'
         self.prelude += PIDS
         self.running_cmd = '[ -n "$(pids_of "$APP_PATTERN")" ]'
+        # A session is up once the app runs, or a boot menu from the stick (or what it started) runs in its place.
+        self.session_cmd = '[ -n "$(pids_of "$APP_PATTERN|/tmp/bootmenu/.*")" ]'
         # The app, or the start-up before it (a stick's autoexec runs first).
         self.starting_cmd = '[ -n "$(pids_of "$APP_PATTERN|/opt/djsemu/init.sh")" ]'
         if os.environ.get("DJS_PROOT"):
@@ -245,9 +247,17 @@ F="${DJS_HOME:-$HOME/djs}/run/autoexec/modlist.txt"
         if self.tag:
             self.sh("""
 [ -x "$DJS_HOME/root/root/pdj/$APP_NAME" ] && exit 0
+[ -x "$BASE_HOME/root/root/pdj/$APP_NAME" ] || exit 0    # run.sh then says what is missing
 mkdir -p "$DJS_HOME"
 cp -a "$BASE_HOME/aes256.key" "$DJS_HOME/" 2> /dev/null
-if command -v rsync > /dev/null; then rsync -a "$BASE_HOME/root/" "$DJS_HOME/root/"; else cp -a "$BASE_HOME/root" "$DJS_HOME/"; fi
+if command -v rsync > /dev/null; then rsync -a "$BASE_HOME/root/" "$DJS_HOME/root/" 2> /dev/null
+else cp -a "$BASE_HOME/root" "$DJS_HOME/" 2> /dev/null; fi
+# Placeholders the guest must not read (mode 000, such as etc/ld.so.preload) cannot be copied: the same, empty.
+(cd "$BASE_HOME/root" && find . ! -perm -u=r 2> /dev/null) | while IFS= read -r p; do
+    if [ -d "$BASE_HOME/root/$p" ]; then mkdir -p "$DJS_HOME/root/$p"; else : > "$DJS_HOME/root/$p"; fi
+    chmod 000 "$DJS_HOME/root/$p"
+done
+true
 """)
 
     def stale(self):
@@ -259,6 +269,7 @@ PID=$(pids_of "$APP_PATTERN" | head -1)
 """ % ((shlex.quote(self.repo()),) * 3))[0] == 0
 
     def start(self):
+        self.ensure_home()
         code, out = self.sh("""
 RUN="${DJS_HOME:-$HOME/djs}/run"
 mkdir -p "$RUN"
@@ -269,10 +280,10 @@ for i in $(seq 1 360); do
     %s && exit 0
     sleep 0.5
 done
-kill -0 "$runner" 2>/dev/null && echo "no app after 3 minutes"
+kill -0 "$runner" 2>/dev/null && echo "no app or boot menu after 3 minutes"
 kill -TERM -- "-$runner" 2>/dev/null || true
 tail -n 15 "$RUN/emulator.log"; exit 1
-""" % (self.port, "1" if self.window else "", self.env, shlex.quote(self.repo()), self.running_cmd))
+""" % (self.port, "1" if self.window else "", self.env, shlex.quote(self.repo()), self.session_cmd))
         if code:
             self.stop()
             sys.exit("the emulator did not start:\n" + out)
@@ -428,7 +439,9 @@ def main():
         return 0
     if args[:1] == ["status"]:
         if not emu.running():
-            if emu.starting():
+            if emu.sh(emu.session_cmd)[0] == 0:
+                print("The emulator is running a boot menu from the stick, or an app it started.")
+            elif emu.starting():
                 print("The emulator is waiting for the official application.")
             else:
                 print("The emulator is not running.")
