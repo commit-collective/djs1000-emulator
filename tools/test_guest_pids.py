@@ -3,6 +3,7 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tempfile
 import unittest
 from uuid import uuid4
 
@@ -53,6 +54,38 @@ class GuestProcesses(unittest.TestCase):
                      str(helper), target], env=dict(os.environ, DJSDEV_TAG=tag),
                     text=True)
                 self.assertEqual(result.split(), [str(children[i].pid)])
+        finally:
+            for child in children:
+                child.terminate()
+                child.wait()
+
+    def test_guest_pidof_keeps_to_its_slot_in_a_shared_proc(self):
+        # Under proot the guest sees the host's /proc: its pidof and killall must take only its own slot's processes.
+        pidof = Path(__file__).resolve().parents[1] / "scripts/guest/pidof"
+        target = "/root/pdj/test-" + uuid4().hex
+        tags = ["", "s1", "s10"]
+        children = []
+        try:
+            for tag in tags:
+                env = dict(os.environ)
+                env.pop("DJSDEV_TAG", None)
+                if tag:
+                    env["DJSDEV_TAG"] = tag
+                children.append(subprocess.Popen(
+                    [sys.executable, "-c", "import time; time.sleep(30)", target], env=env))
+            name = target.rsplit("/", 1)[1]
+            for i, tag in enumerate(tags):
+                env = dict(os.environ, DJSDEV_TAG=tag)
+                result = subprocess.run(["sh", str(pidof), name], env=env, text=True, stdout=subprocess.PIPE)
+                self.assertEqual(result.stdout.split(), [str(children[i].pid)], tag)
+            # killall: the same selection, so another slot's process survives
+            with tempfile.TemporaryDirectory() as d:
+                killall = Path(d) / "killall"
+                killall.symlink_to(pidof)
+                subprocess.run(["sh", str(killall), "-TERM", name], env=dict(os.environ, DJSDEV_TAG="s1"))
+            children[1].wait(timeout=5)
+            self.assertIsNone(children[0].poll())
+            self.assertIsNone(children[2].poll())
         finally:
             for child in children:
                 child.terminate()

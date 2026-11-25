@@ -17,6 +17,11 @@ if [ "$me" = killall ]; then
 fi
 found=1
 ns=$(readlink /proc/self/ns/mnt 2> /dev/null)
+tag=${DJSDEV_TAG:-}
+# The slot a process belongs to: DJSDEV_TAG in its environment (every process of a slot's guest has it), "" for none.
+tag_of() {
+    tr '\0' '\n' < "/proc/$1/environ" 2> /dev/null | sed -n 's/^DJSDEV_TAG=//p' | head -n 1
+}
 for name in "$@"; do
     # One grep over every command line. "[/]" keeps the grep itself, whose
     # arguments hold the pattern, from being taken for the program.
@@ -28,6 +33,8 @@ for name in "$@"; do
         if [ -n "$ns" ] && [ "$(readlink "/proc/$pid/ns/mnt" 2> /dev/null)" != "$ns" ]; then
             continue
         fi
+        # Under proot every slot shares the host's /proc and mount namespace: the tag tells them apart.
+        [ "$(tag_of "$pid")" = "$tag" ] || continue
         if [ "$me" = killall ]; then
             kill $sig "$pid" 2> /dev/null && found=0
         else

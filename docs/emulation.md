@@ -137,7 +137,10 @@ The emulator does the same with the USB folder's `autoexec.bin`:
   `/proc` here names `qemu-arm-static`.
 - The guest has a PID namespace of its own, so its `/proc` shows only its own
   processes. A program that stops the app by name never reaches another
-  slot's.
+  slot's. With PRoot the guest sees the host's `/proc` instead. There the
+  shim, `pidof` and `killall` tell a slot's processes by the `DJSDEV_TAG` in
+  their environment: a listing of `/proc` skips another slot's, and `kill()`
+  of one fails as if it had gone.
 - With extra qemu arguments (`-g` for gdb) `run.sh` starts the app alone, as
   before.
 

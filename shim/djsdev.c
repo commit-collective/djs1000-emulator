@@ -2424,3 +2424,156 @@ int close(int fd)
     }
     return real(fd);
 }
+
+/* A slot's guest keeps to its own processes. With proot (scripts/run.sh) every
+ * slot sees the host's /proc, so a program that looks for the official app by
+ * walking /proc (a boot menu that stops it) would find and signal another
+ * slot's too. Each process of a slot carries the slot's DJSDEV_TAG in its
+ * environment: in a slot, the numbered entries of /proc whose process has
+ * another tag are skipped, and kill() of such a process fails as if it were
+ * gone. Without a slot nothing changes. */
+extern int *__errno_location(void);
+#define ESRCH 3
+#define PROC_DIRS 16
+static void *proc_dir[PROC_DIRS];
+
+static const char *own_tag(void)
+{
+    const char *tag = getenv("DJSDEV_TAG");
+
+    return tag ? tag : "";
+}
+
+/* Whether process `pid` is of this slot: its DJSDEV_TAG is ours. A process
+ * whose environment cannot be read is taken as ours (nothing tells otherwise). */
+static int in_slot(int pid)
+{
+    int (*real_open)(const char *, int, ...) = dlsym(RTLD_NEXT, "open");
+    ssize_t (*real_read)(int, void *, size_t) = dlsym(RTLD_NEXT, "read");
+    int (*real_close)(int) = dlsym(RTLD_NEXT, "close");
+    static const char key[] = "DJSDEV_TAG=";
+    const char *tag = own_tag();
+    char path[32], env[8192], *p;
+    ssize_t n, got = 0;
+    int fd, i = 0, digits[12], d = 0;
+
+    if (!*tag) {
+        return 1;
+    }
+    do {
+        digits[d++] = pid % 10;
+        pid /= 10;
+    } while (pid && d < 12);
+    for (p = "/proc/"; *p; p++) {
+        path[i++] = *p;
+    }
+    while (d) {
+        path[i++] = (char)('0' + digits[--d]);
+    }
+    for (p = "/environ"; *p; p++) {
+        path[i++] = *p;
+    }
+    path[i] = 0;
+    fd = real_open(path, 0);
+    if (fd < 0) {
+        return 1;
+    }
+    while (got < (ssize_t)sizeof(env) - 1 && (n = real_read(fd, env + got, sizeof(env) - 1 - got)) > 0) {
+        got += n;
+    }
+    real_close(fd);
+    env[got] = 0;
+    for (p = env; p < env + got; p += strlen(p) + 1) {
+        if (!strncmp(p, key, sizeof(key) - 1)) {
+            return !strcmp(p + sizeof(key) - 1, tag);
+        }
+    }
+    return 0;    /* no tag: not a process of this slot's guest */
+}
+
+static int numbered(const char *name)
+{
+    if (!*name) {
+        return 0;
+    }
+    for (; *name; name++) {
+        if (*name < '0' || *name > '9') {
+            return 0;
+        }
+    }
+    return 1;
+}
+
+void *opendir(const char *path)
+{
+    void *(*real)(const char *) = dlsym(RTLD_NEXT, "opendir");
+    void *dir = real(path);
+    int i;
+
+    if (dir && *own_tag() && path && (!strcmp(path, "/proc") || !strcmp(path, "/proc/"))) {
+        for (i = 0; i < PROC_DIRS; i++) {
+            if (__sync_bool_compare_and_swap(&proc_dir[i], 0, dir)) {
+                break;
+            }
+        }
+    }
+    return dir;
+}
+
+int closedir(void *dir)
+{
+    int (*real)(void *) = dlsym(RTLD_NEXT, "closedir");
+    int i;
+
+    for (i = 0; dir && i < PROC_DIRS; i++) {
+        __sync_bool_compare_and_swap(&proc_dir[i], dir, 0);
+    }
+    return real(dir);
+}
+
+static int is_proc_dir(void *dir)
+{
+    int i;
+
+    for (i = 0; dir && i < PROC_DIRS; i++) {
+        if (proc_dir[i] == dir) {
+            return 1;
+        }
+    }
+    return 0;
+}
+
+/* glibc 2.13 on 32-bit ARM: d_name follows d_ino, d_off, d_reclen and d_type,
+ * at byte 11 of a struct dirent and byte 19 of a struct dirent64. */
+void *readdir(void *dir)
+{
+    void *(*real)(void *) = dlsym(RTLD_NEXT, "readdir");
+    char *e;
+
+    do {
+        e = real(dir);
+    } while (e && is_proc_dir(dir) && numbered(e + 11) && !in_slot(atoi(e + 11)));
+    return e;
+}
+
+void *readdir64(void *dir)
+{
+    void *(*real)(void *) = dlsym(RTLD_NEXT, "readdir64");
+    char *e;
+
+    do {
+        e = real(dir);
+    } while (e && is_proc_dir(dir) && numbered(e + 19) && !in_slot(atoi(e + 19)));
+    return e;
+}
+
+int kill(int pid, int sig)
+{
+    int (*real)(int, int) = dlsym(RTLD_NEXT, "kill");
+
+    if (pid > 0 && !in_slot(pid)) {
+        *__errno_location() = ESRCH;
+        return -1;
+    }
+    return real(pid, sig);
+}

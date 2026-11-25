@@ -9,7 +9,7 @@ Newest first. A release is a tagged commit.
 ### Fixes
 
 - A boot menu from the stick that stopped the app no longer ends the emulator after 25 seconds, with its screen.
-- Each slot's guest sees only its own processes, so a boot menu in one slot no longer stops the app in the others.
+- Each slot's guest sees only its own processes, with PRoot too, so a boot menu in one slot no longer stops the app in the others.
 - A new slot is made from its unit's home on its first start, instead of failing with "no rootfs".
 - With `DJS_FAST_BOOT`, a stick that shows a boot menu or starts its own app is no longer stopped after 3 minutes.
 
