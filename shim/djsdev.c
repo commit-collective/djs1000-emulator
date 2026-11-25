@@ -1901,26 +1901,37 @@ int setsockopt(int fd, int level, int name, const void *val, unsigned len)
 enum { FORMAT_S16_LE = 2, FORMAT_S24_LE = 6, FORMAT_FLOAT_LE = 14 };
 enum { MASTER, PHONES, INPUT, FILTER_SEND, FILTER_RETURN };
 
+/* `format` is the one the stock app uses. `also` holds other formats the
+ * endpoint takes (bit 1 << format): apps of the SP-16 community ask for
+ * S24_LE or S16_LE on the AK4452 pairs, where the stock app uses float. */
 typedef struct {
     const char *name;
     int stream, channels, format, role;
+    unsigned also;
 } PcmProfile;
+
+#define FORMATS_AK4452 ((1u << FORMAT_S24_LE) | (1u << FORMAT_S16_LE))
 
 #if DJSDEV_SP16
 static const PcmProfile pcm_profiles[] = {
-    {"hw:ak4458audio,0", 0, 16, FORMAT_S16_LE, MASTER},
-    {"hw:ak4452audio,0", 0, 2, FORMAT_FLOAT_LE, PHONES},
-    {"hw:ak4452audio,1", 0, 2, FORMAT_FLOAT_LE, FILTER_SEND},
-    {"hw:ak4452audio,0", 1, 2, FORMAT_FLOAT_LE, INPUT},
-    {"hw:ak4452audio,1", 1, 2, FORMAT_FLOAT_LE, FILTER_RETURN},
+    {"hw:ak4458audio,0", 0, 16, FORMAT_S16_LE, MASTER, 0},
+    {"hw:ak4452audio,0", 0, 2, FORMAT_FLOAT_LE, PHONES, FORMATS_AK4452},
+    {"hw:ak4452audio,1", 0, 2, FORMAT_FLOAT_LE, FILTER_SEND, FORMATS_AK4452},
+    {"hw:ak4452audio,0", 1, 2, FORMAT_FLOAT_LE, INPUT, FORMATS_AK4452},
+    {"hw:ak4452audio,1", 1, 2, FORMAT_FLOAT_LE, FILTER_RETURN, FORMATS_AK4452},
 };
 #else
 static const PcmProfile pcm_profiles[] = {
-    {"hw:ak4452audio,1", 0, 2, FORMAT_S24_LE, MASTER},
-    {"hw:ak4452audio,0", 0, 2, FORMAT_S24_LE, PHONES},
-    {"hw:ak4452audio,0", 1, 2, FORMAT_S24_LE, INPUT},
+    {"hw:ak4452audio,1", 0, 2, FORMAT_S24_LE, MASTER, 0},
+    {"hw:ak4452audio,0", 0, 2, FORMAT_S24_LE, PHONES, 0},
+    {"hw:ak4452audio,0", 1, 2, FORMAT_S24_LE, INPUT, 0},
 };
 #endif
+
+static inline int format_bytes(int format)
+{
+    return format == FORMAT_S16_LE ? 2 : 4;    /* S24_LE: 24 bits in a 32-bit word */
+}
 
 typedef struct {
     long long due;
@@ -1930,6 +1941,7 @@ typedef struct {
 typedef struct {
     void *handle;
     const PcmProfile *profile;
+    int format;    /* the one the app set: the profile's, or one of its `also` */
     void *params;
     PcmClock clock;
 } StandPcm;
@@ -1998,6 +2010,7 @@ int snd_pcm_open(void **pcm, const char *name, int stream, int mode)
         StandPcm *stand = &stand_pcm[i];
 
         stand->profile = profile;
+        stand->format = profile->format;
         stand->params = 0;
         stand->clock = (PcmClock){0, 0};
         __atomic_store_n(&stand->handle, *pcm, __ATOMIC_RELEASE);
@@ -2105,11 +2118,21 @@ int snd_pcm_hw_params_set_format(void *pcm, void *params, int format)
 {
     int (*real)(void *, void *, int) = dlsym(RTLD_NEXT, "snd_pcm_hw_params_set_format");
     StandPcm *stand = find_pcm(pcm);
+    int result;
 
-    if (stand && format != stand->profile->format) {
+    if (stand && format != stand->profile->format
+        && (format < 0 || format > 31 || !(stand->profile->also & (1u << format)))) {
         return -22;    /* EINVAL */
     }
-    return real(pcm, params, format);
+    result = real(pcm, params, format);
+    if (stand && result >= 0) {
+        stand->format = format;
+        if (format != stand->profile->format) {
+            fprintf(stderr, "[djsdev] %s %s takes format %d\n", stand->profile->name,
+                    stand->profile->stream ? "capture" : "playback", format);
+        }
+    }
+    return result;
 }
 
 #if DJSDEV_SP16
@@ -2153,6 +2176,23 @@ static void audio_put_s24(int ch, const int *l, const int *r, unsigned step, uns
     }
 }
 
+/* Interleaved stereo S16_LE frames as floats, for the deck. */
+static inline void audio_put_s16(int ch, const short *samples, unsigned long frames)
+{
+    float f[2 * 256];
+
+    while (frames) {
+        unsigned long i, n = frames < 256 ? frames : 256;
+
+        for (i = 0; i < 2 * n; i++) {
+            f[i] = samples[i] * (1.0f / 32768.0f);
+        }
+        audio_put(ch, f, f + 1, 2, n);
+        samples += 2 * n;
+        frames -= n;
+    }
+}
+
 /* SP-16 main is a 16-channel stream. Only channels 12 and 14 carry
  * the stereo mix in the default routing. */
 static void audio_put_sp16(const short *samples, unsigned long frames)
@@ -2183,6 +2223,10 @@ long snd_pcm_writei(void *pcm, const void *buf, unsigned long frames)
             audio_put_s24(role, buf, (const int *)buf + 1, 2, frames);
         } else if (role == MASTER) {
             audio_put_sp16(buf, frames);
+        } else if (stand->format == FORMAT_S24_LE) {
+            audio_put_s24(role, buf, (const int *)buf + 1, 2, frames);
+        } else if (stand->format == FORMAT_S16_LE) {
+            audio_put_s16(role, buf, frames);
         } else {
             audio_put(role, buf, (const float *)buf + 1, 2, frames);
         }
@@ -2207,7 +2251,7 @@ long snd_pcm_readi(void *pcm, void *buf, unsigned long frames)
     if (DJSDEV_SP16) {
         pcm_wait(&stand->clock, now_us(), frames);
         if (stand->profile->role == FILTER_RETURN) {
-            memset(buf, 0, frames * 2 * sizeof(float));
+            memset(buf, 0, frames * 2 * format_bytes(stand->format));
             return frames;
         }
     }
@@ -2224,7 +2268,11 @@ long snd_pcm_readi(void *pcm, void *buf, unsigned long frames)
             right = in_ring[(r % RING_FRAMES) * 2 + 1];
             r++;
         }
-        if (DJSDEV_SP16) {
+        if (DJSDEV_SP16 && stand->format == FORMAT_S16_LE) {
+            short *out = buf;
+            out[2 * i] = (short)left;
+            out[2 * i + 1] = (short)right;
+        } else if (DJSDEV_SP16 && stand->format == FORMAT_FLOAT_LE) {
             float *out = buf;
             out[2 * i] = left * (1.0f / 32768.0f);
             out[2 * i + 1] = right * (1.0f / 32768.0f);

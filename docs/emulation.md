@@ -64,6 +64,10 @@ periods and two periods per buffer.
 | `hw:ak4452audio,0` | Capture | 2 | FLOAT_LE | Stereo deck input |
 | `hw:ak4452audio,1` | Capture | 2 | FLOAT_LE | Silent analog return |
 
+The format is the firmware's. The four AK4452 streams also take S24_LE (24 bits
+in a 32-bit word) and S16_LE, which other apps for the SP-16 ask for. The
+emulator converts whichever the app set.
+
 The firmware writes all three playback streams in sequence. The master write
 paces the playback thread once per period. The two capture threads each use
 their own deadlines.

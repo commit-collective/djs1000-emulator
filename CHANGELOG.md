@@ -4,7 +4,7 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
-- Run TORAIZ SP-16 firmware 1.60 with `--unit sp16`, with the hardware layout on its virtual deck, dedicated audio and Pro DJ Link sync.
+- Run TORAIZ SP-16 firmware 1.60 with `--unit sp16`, with the hardware layout on its virtual deck, dedicated audio (S24_LE and S16_LE too on the AK4452 streams, for other apps) and Pro DJ Link sync.
 
 ### Fixes
 
