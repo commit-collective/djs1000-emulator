@@ -246,9 +246,11 @@ F="${DJS_HOME:-$HOME/djs}/run/autoexec/modlist.txt"
         """The slot's home, made from the selected unit home the first time (the unit's root file system and the key: 250 MB)."""
         if self.tag:
             self.sh("""
-[ -x "$DJS_HOME/root/root/pdj/$APP_NAME" ] && exit 0
+# A copy that stopped part way leaves .slot-copying behind, and is done again (the app alone does not make a slot).
+[ -x "$DJS_HOME/root/root/pdj/$APP_NAME" ] && [ ! -e "$DJS_HOME/.slot-copying" ] && exit 0
 [ -x "$BASE_HOME/root/root/pdj/$APP_NAME" ] || exit 0    # run.sh then says what is missing
 mkdir -p "$DJS_HOME"
+: > "$DJS_HOME/.slot-copying"
 cp -a "$BASE_HOME/aes256.key" "$DJS_HOME/" 2> /dev/null
 if command -v rsync > /dev/null; then rsync -a "$BASE_HOME/root/" "$DJS_HOME/root/" 2> /dev/null
 else cp -a "$BASE_HOME/root" "$DJS_HOME/" 2> /dev/null; fi
@@ -257,6 +259,12 @@ else cp -a "$BASE_HOME/root" "$DJS_HOME/" 2> /dev/null; fi
     if [ -d "$BASE_HOME/root/$p" ]; then mkdir -p "$DJS_HOME/root/$p"; else : > "$DJS_HOME/root/$p"; fi
     chmod 000 "$DJS_HOME/root/$p"
 done
+# Done once the slot holds every name the unit's home has (the copy's exit codes count the placeholders as errors).
+if [ "$(cd "$BASE_HOME/root" && find . 2> /dev/null | sort | cksum)" = "$(cd "$DJS_HOME/root" && find . 2> /dev/null | sort | cksum)" ]; then
+    rm -f "$DJS_HOME/.slot-copying"
+else
+    echo "the copy of $BASE_HOME/root is not complete: the next start copies again"
+fi
 true
 """)
 

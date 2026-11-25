@@ -140,7 +140,10 @@ The emulator does the same with the USB folder's `autoexec.bin`:
   slot's. With PRoot the guest sees the host's `/proc` instead. There the
   shim, `pidof` and `killall` tell a slot's processes by the `DJSDEV_TAG` in
   their environment: a listing of `/proc` skips another slot's, and `kill()`
-  of one fails as if it had gone.
+  of one fails as if it had gone. An emulator without a slot has no tag, and
+  keeps to the processes without one.
+- A slot's first start copies its unit's home (`~/djs` or `~/sp16`). A copy
+  that stops part way is done again at the next start.
 - With extra qemu arguments (`-g` for gdb) `run.sh` starts the app alone, as
   before.
 

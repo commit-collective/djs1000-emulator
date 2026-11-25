@@ -2429,9 +2429,10 @@ int close(int fd)
  * slot sees the host's /proc, so a program that looks for the official app by
  * walking /proc (a boot menu that stops it) would find and signal another
  * slot's too. Each process of a slot carries the slot's DJSDEV_TAG in its
- * environment: in a slot, the numbered entries of /proc whose process has
- * another tag are skipped, and kill() of such a process fails as if it were
- * gone. Without a slot nothing changes. */
+ * environment: the numbered entries of /proc whose process has another tag
+ * are skipped, and kill() of such a process fails as if it were gone. A
+ * session without a slot has no tag, and its processes are those without one
+ * (the host's own included), so it cannot reach a slot's either. */
 extern int *__errno_location(void);
 #define ESRCH 3
 #define PROC_DIRS 16
@@ -2444,8 +2445,9 @@ static const char *own_tag(void)
     return tag ? tag : "";
 }
 
-/* Whether process `pid` is of this slot: its DJSDEV_TAG is ours. A process
- * whose environment cannot be read is taken as ours (nothing tells otherwise). */
+/* Whether process `pid` is of this session: its DJSDEV_TAG is ours, or both
+ * have none. A process whose environment cannot be read is taken as ours
+ * (another user's: nothing tells otherwise). */
 static int in_slot(int pid)
 {
     int (*real_open)(const char *, int, ...) = dlsym(RTLD_NEXT, "open");
@@ -2457,9 +2459,6 @@ static int in_slot(int pid)
     ssize_t n, got = 0;
     int fd, i = 0, digits[12], d = 0;
 
-    if (!*tag) {
-        return 1;
-    }
     do {
         digits[d++] = pid % 10;
         pid /= 10;
@@ -2488,7 +2487,7 @@ static int in_slot(int pid)
             return !strcmp(p + sizeof(key) - 1, tag);
         }
     }
-    return 0;    /* no tag: not a process of this slot's guest */
+    return !*tag;    /* no tag: a process of a session without a slot (or the host's) */
 }
 
 static int numbered(const char *name)
@@ -2510,7 +2509,7 @@ void *opendir(const char *path)
     void *dir = real(path);
     int i;
 
-    if (dir && *own_tag() && path && (!strcmp(path, "/proc") || !strcmp(path, "/proc/"))) {
+    if (dir && path && (!strcmp(path, "/proc") || !strcmp(path, "/proc/"))) {
         for (i = 0; i < PROC_DIRS; i++) {
             if (__sync_bool_compare_and_swap(&proc_dir[i], 0, dir)) {
                 break;
