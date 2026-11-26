@@ -126,7 +126,9 @@ Sound, all at 44.1 kHz stereo:
 - the main device (the system's default, or `--audio NAME`: the device whose
   name contains NAME) plays the master output or the headphone output. The
   MASTER / PHONES switch in the status line, or Tab, chooses (`--listen
-  phones` starts on the headphones). `--no-audio` plays nothing
+  phones` starts on the headphones). On the SP-16 the switch is MAIN, OUT
+  3-4, OUT 5-6, OUT 7-8 and PHONES: the assignable outputs a track can be
+  sent to in MIXER > OUTPUT SETTING. A recording takes the one chosen. `--no-audio` plays nothing
   and shows no switch, `--mute` plays nothing too but shows the switch as if a sound device were there (for a recording)
 - the app keeps the host's clock, as the unit keeps one clock for its sound and the link. The deck keeps what waits
   steady by leaving out or doubling a frame of sound now and then, which is not heard. `--pace` paces the app to the
@@ -202,7 +204,7 @@ diagnostics (F12) show every one by id.
 Keyboard: Space PLAY/PAUSE, B STOP, N REC, Left Shift SHIFT, M MODE, H HOME,
 Esc or Backspace BACK, P PROJECT, L SAMPLING, X FX, S SYNC, `-` TEMPO range,
 1–8 and Q–I the step keys, F1–F6 the knobs (with Right Shift the other
-way), Tab MASTER / PHONES. The selector: Up and Down (or `,` `.`) turn it,
+way), Tab MASTER / PHONES (on the SP-16 MAIN, OUT 3-4, 5-6, 7-8, PHONES). The selector: Up and Down (or `,` `.`) turn it,
 Page Up and Page Down by five, Enter or Right push it, Left is BACK.
 
 ## Recording

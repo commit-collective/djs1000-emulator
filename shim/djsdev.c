@@ -627,7 +627,11 @@ static void shot_write(void)
  *   shot                       write the screen copy to /tmp/djsshot.raw
  *   click <x> <y> [button]     mouse press and release at screenshot coordinates
  *   usb <0|1>                  unplug / plug the USB drive
+ *   out <0-3>                  SP-16: the pair the master stream carries
+ *                              (MAIN, OUT 3-4, OUT 5-6, OUT 7-8)
  */
+static volatile int sp16_out;     /* out: 0 MAIN, 1-3 OUT 3-4, 5-6, 7-8 */
+
 static void panel_command(const char *line)
 {
     int a = 0, b = 0, c = 0;
@@ -653,6 +657,8 @@ static void panel_command(const char *line)
         } else {
             system(a ? "/bin/sh /opt/djsemu/init.sh plug" : "/bin/sh /opt/djsemu/init.sh unplug");
         }
+    } else if (sscanf(line, "out %i", &a) == 1 && a >= 0 && a < 4) {
+        sp16_out = a;
     } else if (sscanf(line, "bit %i %i %i", &a, &b, &c) == 3) {
         panel_bit(a, b, c);
     } else if (sscanf(line, "tap %i %i", &a, &b) == 2) {
@@ -2193,18 +2199,20 @@ static inline void audio_put_s16(int ch, const short *samples, unsigned long fra
     }
 }
 
-/* SP-16 main is a 16-channel stream. Only channels 12 and 14 carry
- * the stereo mix in the default routing. */
+/* SP-16 main is a 16-channel stream. Channels 12 and 14 carry MAIN,
+ * 8 and 10 OUT 3-4, 4 and 6 OUT 5-6, 0 and 2 OUT 7-8. The master stream
+ * carries the pair `out` chose (sp16_out). */
 static void audio_put_sp16(const short *samples, unsigned long frames)
 {
     float stereo[2 * 64];
+    int left = 12 - 4 * sp16_out;
 
     while (frames) {
         unsigned long i, count = frames < 64 ? frames : 64;
 
         for (i = 0; i < count; i++, samples += 16) {
-            stereo[2 * i] = samples[12] * (1.0f / 32768.0f);
-            stereo[2 * i + 1] = samples[14] * (1.0f / 32768.0f);
+            stereo[2 * i] = samples[left] * (1.0f / 32768.0f);
+            stereo[2 * i + 1] = samples[left + 2] * (1.0f / 32768.0f);
         }
         audio_put(0, stereo, stereo + 1, 2, count);
         frames -= count;

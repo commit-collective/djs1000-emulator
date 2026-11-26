@@ -58,7 +58,7 @@ periods and two periods per buffer.
 
 | Device | Direction | ALSA channels | Format | Backend |
 | --- | --- | --- | --- | --- |
-| `hw:ak4458audio,0` | Playback | 16 | S16_LE | Master stereo from slots 12 and 14 in the default routing |
+| `hw:ak4458audio,0` | Playback | 16 | S16_LE | Master stereo: MAIN from slots 12 and 14, or OUT 3-4, 5-6 or 7-8 (slots 8 and 10, 4 and 6, 0 and 2) |
 | `hw:ak4452audio,0` | Playback | 2 | FLOAT_LE | Headphones stereo |
 | `hw:ak4452audio,1` | Playback | 2 | FLOAT_LE | Analog send to the null PCM |
 | `hw:ak4452audio,0` | Capture | 2 | FLOAT_LE | Stereo deck input |
@@ -67,6 +67,12 @@ periods and two periods per buffer.
 The format is the firmware's. The four AK4452 streams also take S24_LE (24 bits
 in a 32-bit word) and S16_LE, which other apps for the SP-16 ask for. The
 emulator converts whichever the app set.
+
+The app assigns a track to an output pair in MIXER > OUTPUT SETTING (OUT
+ASSIGN). In the default ASSIGN MODE, M+6CH, MAIN still carries the whole mix.
+The deck link carries one pair as the master output, MAIN unless `out <0-3>`
+chooses another (0 MAIN, 1 OUT 3-4, 2 OUT 5-6, 3 OUT 7-8). The deck's
+switch sends it, and `Session.out()` does from a script.
 
 The firmware writes all three playback streams in sequence. The master write
 paces the playback thread once per period. The two capture threads each use

@@ -147,6 +147,11 @@ class Session:
         self.send(f"touch 0 {x + ORIGIN} {y + ORIGIN}")
         self.settle()
 
+    def out(self, pair):
+        """SP-16: the pair of its 16-channel output that output 0 (the master) carries from now on: 0 MAIN (the default),
+        1 OUT 3-4, 2 OUT 5-6, 3 OUT 7-8. It stays until the next out or a deck with sound connects."""
+        self.send(f"out {pair}")
+
     def pad(self, n, level=800, hold=0.15):
         """Hits pad n (0-15)."""
         self.send(f"pad {n} {level} {level}")

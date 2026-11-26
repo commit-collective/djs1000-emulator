@@ -108,7 +108,9 @@ HELP = (                                 # the side panel's reminder: (keys, wha
 )
 HELP_SP16 = HELP[:2] + (
     ("Right-click", "pad, step key: hold it down (click to let go)   |   strip: leave a finger on it"),
-) + HELP[3:7] + (("H  M  C  G", "HOME   MODE   SCENE   PATTERN"),) + HELP[8:]
+) + HELP[3:7] + (("H  M  C  G", "HOME   MODE   SCENE   PATTERN"),) + (
+    ("Tab", "main sound device: MAIN, OUT 3-4, 5-6, 7-8 or PHONES"),
+) + HELP[9:]
 DRAG_PX = 7                              # mouse travel for one encoder step
 
 # Keyboard keys for controls that are not drawn as a Key or Knob.
@@ -455,6 +457,8 @@ class Deck:
         self.big = pygame.font.SysFont("arial", 22, bold=True)
         self.listen = listen if listen is not None else [0]   # the output the main device plays
         self.listen_rect = pygame.Rect(0, 0, 0, 0)
+        self.listen_parts = []           # the switch's buttons: (where, which)
+        self.out = 0                     # SP-16: the pair the master output carries (0 MAIN, 1-3 OUT 3-4, 5-6, 7-8)
         pygame.display.set_icon(self.icon())
         self.win = pygame.display.set_mode(size, pygame.RESIZABLE)
         pygame.display.set_caption(f"Virtual {L.MODEL}")
@@ -987,10 +991,27 @@ class Deck:
         self.link.send(f"word {L.SLIDER_WORD} {self.slider_value()}")
 
     def switch_output(self):
-        """The main device plays the other output: master or headphones."""
-        if self.master:
+        """The main device plays the other output: master or headphones. The SP-16 steps through MAIN, its three assignable
+        pairs and PHONES."""
+        if L is layout_sp16:
+            self.choose_output((self.output_choice() + 1) % 5)
+        elif self.master:
             self.listen[0] ^= 1
             self.master.reset()
+
+    def output_choice(self):
+        """The SP-16 switch's lit button: 0 MAIN, 1-3 OUT 3-4, 5-6, 7-8, 4 PHONES."""
+        return 4 if self.listen[0] else self.out
+
+    def choose_output(self, i):
+        """The SP-16 switch's button i. A pair becomes the master output, which carries the app's MAIN by default."""
+        if not self.master or i == self.output_choice():
+            return
+        if i < 4:
+            self.out = i
+            self.link.send(f"out {i}")
+        self.listen[0] = 1 if i == 4 else 0
+        self.master.reset()
 
     def pad_velocity(self, key, pos):
         """How hard, of 1023: a hit begins at the pad's calibration (336) and is at full velocity near 840. By default harder towards the
@@ -1060,7 +1081,11 @@ class Deck:
             self.copy_last()
             return
         if what[0] == "listen":
-            self.switch_output()
+            part = [i for r, i in self.listen_parts if r.collidepoint(pos)]
+            if L is layout_sp16 and part:
+                self.choose_output(part[0])
+            else:
+                self.switch_output()
             return
         if what[0] == "mod":
             self.last_action = f"ctx.say('toggle {what[1]}')"
@@ -1230,6 +1255,8 @@ class Deck:
             elif item[0] == "up":
                 self.up_at = pygame.time.get_ticks()
                 self.analogue()
+                if L is layout_sp16 and self.master:
+                    self.link.send(f"out {self.out}")      # the shim keeps the last deck's choice
             elif item[0] == "down":
                 self.latched.clear()
                 self.have_screen = False
@@ -1613,18 +1640,23 @@ class Deck:
         device, then the devices. Returns where it ends."""
         win = self.win
         self.listen_rect = pygame.Rect(0, 0, 0, 0)
+        self.listen_parts = []
         if self.master:
             left = x
-            for i, name in enumerate(("MASTER", "PHONES")):
-                on = self.listen[0] == i
+            names = ("MAIN", "OUT 3-4", "OUT 5-6", "OUT 7-8", "PHONES") if L is layout_sp16 else ("MASTER", "PHONES")
+            lit = self.output_choice() if L is layout_sp16 else self.listen[0]
+            for i, name in enumerate(names):
+                on = lit == i
+                last = i == len(names) - 1
                 t = self.small.render(name, True, (10, 10, 10) if on else (150, 152, 158))
                 r = pygame.Rect(x, top + 4, t.get_width() + 14, STATUS_H - 8)
                 pygame.draw.rect(win, (150, 220, 120) if on else (62, 64, 70) if self.hovering(r) else (40, 41, 45), r,
                                  border_top_left_radius=4 if i == 0 else 0,
                                  border_bottom_left_radius=4 if i == 0 else 0,
-                                 border_top_right_radius=4 if i else 0,
-                                 border_bottom_right_radius=4 if i else 0)
+                                 border_top_right_radius=4 if last else 0,
+                                 border_bottom_right_radius=4 if last else 0)
                 win.blit(t, t.get_rect(center=r.center))
+                self.listen_parts.append((r, i))
                 x = r.right
             self.listen_rect = pygame.Rect(left, top, x - left, STATUS_H)
             text = f"on {self.master.name}"
