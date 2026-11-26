@@ -94,7 +94,8 @@ TEXTS = [
     Text(1630, 50, "USB", 14),
     Text(1600, 199, "BACK", 14),
     Text(1674, 199, "HOME", 14),
-    Text(1630, 604, "SP-16", 23),
+    Text(1630, 596, "PROFESSIONAL", 14),
+    Text(1630, 614, "SAMPLER", 14),
     Text(1630, 751, "LENGTH", 13),
 ]
 TEXTS += [Text(x, 793, str(i), 15) for i, x in enumerate(BAR_X, 1)]

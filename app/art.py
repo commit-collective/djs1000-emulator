@@ -195,6 +195,26 @@ class _Canvas:
             d.rectangle((x0, y0, x1, y1), fill=col)
         self.overlay(draw, b, rgba, blur)
 
+    def brushed(self, b, amount, seed=7):
+        """Brushed metal over rectangle b: fine streaks along x, each row a little lighter or darker than the last, by up to `amount`
+        of 255. Drawn from a fixed seed, so the face is the same each time."""
+        import random
+        x0, y0, x1, y1 = (int(round(v)) for v in self.box(b))
+        w, h = max(1, x1 - x0), max(1, y1 - y0)
+        rng = random.Random(seed)
+        cols = 24                                            # the streaks change slowly along their length
+        grain = Image.new("L", (cols, h))
+        grain.putdata([max(0, min(255, int(128 + rng.gauss(0, 42)))) for _ in range(cols * h)])
+        grain = grain.resize((w, h), Image.BILINEAR)
+        light = grain.point(lambda v: max(0, v - 128) * amount // 64)
+        dark = grain.point(lambda v: max(0, 128 - v) * amount // 64)
+        layer = Image.new("RGBA", (w, h), (255, 255, 255, 0))
+        layer.putalpha(light)
+        shade = Image.new("RGBA", (w, h), (0, 0, 0, 0))
+        shade.putalpha(dark)
+        self.img.alpha_composite(layer, (x0, y0))
+        self.img.alpha_composite(shade, (x0, y0))
+
     def shade_circle(self, cx, cy, r, rgba, blur=0):
         self.overlay(lambda d, m, col: d.ellipse((*m(cx - r, cy - r), *m(cx + r, cy + r)), fill=col),
                      (cx - r, cy - r, cx + r, cy + r), rgba, blur)
@@ -534,7 +554,8 @@ def _sp16_face(c):
     real = STYLE == "real"
     bx0, by0, bx1, by1 = L.BODY
     if real:
-        c.gradient_rect(L.BODY, 9, (37, 37, 40), (27, 27, 30), "v")
+        c.gradient_rect(L.BODY, 9, (31, 31, 34), (22, 22, 25), "v")        # near black, brushed along its width
+        c.brushed((bx0 + 3, by0 + 3, bx1 - 3, by1 - 3), 9)
         c.rect(L.BODY, radius=9, outline=BODY_EDGE, width=2)
         c.gradient_rect((bx0 + 2, by0 + 2, bx1 - 2, by0 + 28), 6, (17, 17, 19), (49, 49, 53))
         c.line([(bx0 + 15, by0 + 28), (bx1 - 15, by0 + 28)], (86, 87, 92), 2)
@@ -565,8 +586,12 @@ def _sp16_face(c):
     c.line([(x0 + 7, y1 - 33), (x1 - 7, y1 - 33)], (49, 50, 54), 2)
 
     x0, y0, x1, y1 = L.FILTER_PANEL
-    c.line([(420, y0), (x0, y0), (x0, y1), (x1, y1), (x1, y0), (796, y0)], (142, 143, 148), 2)
-    c.line([(487, y0), (715, y0)], (142, 143, 148), 2)
+    # The box's top line stops short of its two titles, LOW PASS and HIGH PASS
+    gaps = [(t.x - font(t.size).getlength(t.text) / 2 - 9, t.x + font(t.size).getlength(t.text) / 2 + 9)
+            for t in L.TEXTS if t.text in ("LOW PASS", "HIGH PASS")]
+    (a0, a1), (b0, b1) = sorted(gaps)
+    c.line([(a0, y0), (x0, y0), (x0, y1), (x1, y1), (x1, y0), (min(b1, x1), y0)], (142, 143, 148), 2)
+    c.line([(a1, y0), (b0, y0)], (142, 143, 148), 2)
     c.line([(680, y0 + 13), (680, y1 - 13)], (142, 143, 148), 2)
     for knob in L.KNOBS:
         cx, cy, r = knob.circle
