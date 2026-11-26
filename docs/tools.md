@@ -50,9 +50,11 @@
   control of the virtual deck with no app running, in both faces (`flat` and `real`), and draws the face and every key at many
   sizes of window. Run it after changing `app/`.
 - `tools/hero_scene.py` and `tools/hero.py`: the hero picture of the README and the website. The first starts an emulator of its
-  own with the test kit and saves the deck's window; the second puts the deck, the app's screen and the list of mods into the
-  three cards of the previous picture (by default the website's, `commitcollective.cc/public/djs1000/emulator/hero.png`), so that
-  the titles and the layout stay as they were. Run both again after the look of the deck changes.
+  own and saves a deck's window: the DJS-1000 with the test kit (`--patch` for the mods' list), or with `--unit sp16` the
+  SP-16 opening the project of the last regression session (run `tools/regress.py` first). The second puts the DJS-1000, the
+  SP-16 and the list of mods into the previous picture (by default the website's,
+  `commitcollective.cc/public/djs1000/emulator/hero.png`), so that the layout stays as it was, and writes the two titles in
+  the website's JetBrains Mono (`TITLES`). Run them again after the look of a deck changes.
 - Pro DJ Link decks: Deckbench (its own repository, beside this one or named by `DECKBENCH`). `start.py` runs it in the emulator's network. Its page is at <http://localhost:8750/>.
 - `tools/xref.py <binary> "<string>"`: where a string is used, with the code
   leading up to it and the branches to it.
