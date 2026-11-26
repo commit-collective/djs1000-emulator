@@ -7,7 +7,7 @@ mods, automate regression checks and debug its UI without hardware.
 The emulator can also run the TORAIZ SP-16 application with its own virtual
 deck. See the [SP-16 setup guide](docs/running.md#toraiz-sp-16).
 
-<img src="https://commitcollective.cc/djs1000/emulator/hero.png" alt="The virtual deck, application screen and installed mod controls" width="1000">
+<img src="https://commitcollective.cc/djs1000/emulator/hero.png" alt="The DJS-1000 and TORAIZ SP-16 virtual decks, each running its own app, and the installed DJS-1000 mod controls" width="1000">
 
 A lightweight Linux backend runs the real ARM application under QEMU user
 mode, with a shim for the missing hardware. Its screen is rendered off-screen
