@@ -52,6 +52,7 @@ import subprocess
 import sys
 import threading
 import time
+import warnings
 import webbrowser
 from collections import deque
 
@@ -590,7 +591,9 @@ class Deck:
 
     def keep_on_top(self):
         try:
-            pygame.Window.from_display_module().always_on_top = self.on_top
+            with warnings.catch_warnings():     # pygame-ce 2.5 warns about a display-module window: it is the only window here
+                warnings.simplefilter("ignore", DeprecationWarning)
+                pygame.Window.from_display_module().always_on_top = self.on_top
         except (AttributeError, pygame.error):
             self.on_top = False
 
@@ -1874,7 +1877,8 @@ def main():
     ap.add_argument("--no-input", action="store_true", help="feed the app's input silence")
     ap.add_argument("--list-audio", action="store_true", help="print the sound devices and quit")
     ap.add_argument("--compact", action="store_true",
-                    help="start without the side panel (the large screen; F10 shows it)")
+                    help="start without the side panel (the large screen; F10 or PANEL shows it). The SP-16 starts so")
+    ap.add_argument("--panel", action="store_true", help="start with the side panel, the SP-16 too")
     ap.add_argument("--face", choices=("flat", "real"), default=os.environ.get("DJS_FACE", "real"),
                     help="how the face is drawn: real (black gloss, bevels, chrome and brushed metal, shadows) or flat (dark "
                          "grey plastic, the first look; default $DJS_FACE, else real)")
@@ -1925,6 +1929,8 @@ def main():
             master.feed(data)
         if phones and which == 1:
             phones.feed(data)
+    if L is layout_sp16 and not args.panel:
+        args.compact = True                 # its face is wide: the panel would take half the window
     desk_w, desk_h = pygame.display.get_desktop_sizes()[0]
     h = args.height or min(desk_h - 110, 1060)
     if L is layout_sp16 and not args.height:

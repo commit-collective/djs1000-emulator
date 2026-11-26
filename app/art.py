@@ -582,6 +582,10 @@ def _sp16_face(c):
         c.rect((x - 26, 785, x + 26, 801), outline=PRINT, width=1.5)
     for text in L.TEXTS:
         c.text(text.x, text.y, text.text, text.size, fill=text.color, anchor=text.anchor, bold=text.bold)
+        if text.text in ("WAKE UP", "LENGTH"):       # the unit prints them in a box
+            half = font(text.size).getlength(text.text) / 2 + 7
+            c.rect((text.x - half, text.y - text.size * 0.75, text.x + half, text.y + text.size * 0.75), radius=2,
+                   outline=(225, 228, 232), width=1.4)
     for key in L.KEYS:
         _draw_key(c, key, 0, None, False)
 
