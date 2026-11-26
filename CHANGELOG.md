@@ -4,7 +4,8 @@ Newest first. A release is a tagged commit.
 
 ## Unreleased
 
-- `tools/freesp16_smoke.py` runs freesp16's emulator smoke test on the SP-16 or the DJS-1000.
+- `tools/freesp16_smoke.py` runs freesp16's emulator smoke test on the SP-16 or the DJS-1000, its renderer comparison included.
+- `tools/freesp16_bench.py` builds and runs freesp16's device benches on the SP-16 or the DJS-1000.
 - Run TORAIZ SP-16 firmware 1.60 with `--unit sp16`, with the hardware layout on its virtual deck, dedicated audio (S24_LE and S16_LE too on the AK4452 streams, for other apps) and Pro DJ Link sync.
 
 ### Fixes

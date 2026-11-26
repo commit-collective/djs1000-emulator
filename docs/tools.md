@@ -35,10 +35,17 @@
 - `tools/freesp16_smoke.py --freesp16 PATH`: freesp16's own emulator smoke test, run here (SP-16 or `--unit djs1000`,
   in a slot of its own, 47 by default). It puts the boot menu, the freesp16 build and its test kit on the slot's stick,
   hits the 16 pads while recording MAIN, and checks the sound with freesp16's `tools/analyze-wav.py` and the app's log
-  for xruns. `--tone` checks the test tone instead. It takes only a new slot or one it made (it marks the home), never
+  for xruns. The renderer comparison is on (`compare=1`, as freesp16's own test) and its lines are shown, not gated.
+  `--tone` checks the test tone instead. It takes only a new slot or one it made (it marks the home), never
   one that runs or whose port answers, nor 10, 20 or 30, and it ignores `DJS_USB`. A run with no screen from the app
   fails. The output goes in `demo/freesp16-smoke`. Its screenshots show
   800x480 of the app's larger screen (`session.py` takes the stock app's size).
+- `tools/freesp16_bench.py --freesp16 PATH --armel-build DIR BENCH`: freesp16's device benches (its
+  `scripts/emulator-bench.sh`), run here. It builds freesp16's bench harness and the chosen `tests/bench` sources
+  against an existing armel build of freesp16, with that build's own toolchain (`--toolchain` for another), puts it on
+  the slot's stick as the folder app `freesp16-bench` and prints the BENCH lines once it reports `BENCH DONE`. BENCH is
+  a bench file stem or one BENCH's name, as in freesp16's script. Same slot rules as the smoke test. The timings are
+  qemu's, relative only. The report goes in `demo/freesp16-bench`.
 - `tools/deck_selftest.py`: presses, drags and releases the mouse on every
   control of the virtual deck with no app running, in both faces (`flat` and `real`), and draws the face and every key at many
   sizes of window. Run it after changing `app/`.

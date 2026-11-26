@@ -44,3 +44,5 @@ jobs:
         run: python tools/deck_selftest.py
       - name: Check the pace of the app's clock
         run: python tools/test_pace.py
+      - name: Check how the freesp16 bench runner picks its sources
+        run: python tools/test_freesp16_bench.py
