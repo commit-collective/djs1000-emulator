@@ -6,14 +6,15 @@ menu. Its own smoke test needs another emulator (Apple silicon only). This one
 does the same steps with this emulator's tools, so it runs on Windows (WSL) and
 Linux too, and on the DJS-1000:
 
-  1. a slot's stick gets the boot menu, the freesp16 build, its settings and its
-     16-sample test kit (freesp16's tools/gen-test-kit.py), the menu set to
-     start freesp16
+  1. a slot's stick gets the boot menu, the freesp16 build, its settings (the
+     renderer comparison on, as freesp16's own test) and its 16-sample test kit
+     (freesp16's tools/gen-test-kit.py), the menu set to start freesp16
   2. the slot starts (start.py --no-deck), the script waits for "KIT ready"
   3. it hits pads 1-16 500 ms apart while recording MAIN over the deck link
      (tools/session.py), turns knob 1 down 20 detents and back, takes the screen
   4. freesp16's tools/analyze-wav.py checks the recording against the kit (16
-     onsets in order, peak, clicks), and the app's log is read for xruns
+     onsets in order, peak, clicks), and the app's log is read for xruns and
+     the renderer comparison (reported, not gated)
   5. the slot stops (--keep leaves it running)
 
     python tools/freesp16_smoke.py --freesp16 PATH [options]
@@ -174,7 +175,12 @@ def main():
         if not os.path.isfile(f):
             sys.exit("no %s" % f)
     os.makedirs(out, exist_ok=True)
+    return with_slot(unit, slot, distro, lambda b: run(b, checkout, binary, bootmenu, unit, slot, out, tone, keep))
 
+
+def with_slot(unit, slot, distro, body):
+    """Claims and locks the slot, runs body(b) under the lock and returns its exit code. Refused: a slot on the ports
+    of an emulator without a slot, one that runs or answers, or one with a home this runner did not make."""
     if 7300 + slot in UNSLOTTED_PORTS:
         sys.exit("slot %d would use port %d, an emulator without a slot's: pick another --slot" % (slot, 7300 + slot))
     b = Bench(unit, slot, distro)
@@ -194,7 +200,7 @@ def main():
             print("slot %d is in use (a run left it running with --keep?): stop it first "
                   "(DJS_SLOT=%d start.py --unit %s stop), or pick another --slot" % (slot, slot, unit))
             return 2
-        return run(b, checkout, binary, bootmenu, unit, slot, out, tone, keep)
+        return body(b)
     finally:
         b.unlock()
 
@@ -206,7 +212,7 @@ def run(b, checkout, binary, bootmenu, unit, slot, out, tone, keep):
     # 1. the stick
     q = shlex.quote
     tools = b.path(os.path.join(checkout, "tools"))
-    settings = "test_tone=1" if tone else "dev_kit=Samples/TestKit"
+    settings = ["compare=1", "compare_frames=300", "test_tone=1" if tone else "dev_kit=Samples/TestKit"]
     code, text = b.sh(f"""
 set -e
 USB="$DJS_HOME/usb"; DATA="$USB/{NAME}-data/{NAME}"; RUN="$DJS_HOME/run/{NAME}-smoke"
@@ -215,7 +221,7 @@ mkdir -p "$USB" "$DATA" "$RUN"
 [ -f "$USB/autoexec.bin" ] || {{ echo "no boot menu on the stick: give --bootmenu FILE"; exit 1; }}
 cp {q(b.path(binary))} "$USB/{NAME}"
 printf 'default={NAME}\\ntimeout=1\\nssh=0\\n' > "$USB/bootmenu.conf"
-printf '%s\\n' {q(settings)} > "$DATA/{NAME}.conf"
+printf '%s\\n' {" ".join(q(x) for x in settings)} > "$DATA/{NAME}.conf"
 {"" if tone else 'rm -rf "$DATA/Samples/TestKit"; '
  f'python3 {q(tools)}/gen-test-kit.py "$DATA/Samples/TestKit" --json "$RUN/kit.json" > /dev/null'}
 : > "$USB/bootmenu.log"
@@ -292,6 +298,9 @@ echo "stick ready: $USB"
         lines = app_lines(log)
         with open(os.path.join(out, "app.log"), "w", encoding="utf-8") as f:
             f.write("\n".join(lines) + "\n")
+        print("--- renderers (compare=1)")
+        for line in [l for l in lines if l.startswith("COMPARE")] or ["no COMPARE line"]:
+            print(line)
         print("--- engine")
         for line in [l for l in lines if l.startswith(("AUDIO alsa", "LOAD", "FRAME run"))][-3:]:
             print(line)
