@@ -1633,7 +1633,7 @@ class Deck:
             text += f"  \u00b7  in: {self.recorder.name}"
         cut = self.master and (getattr(self.master, "dry", 0) or getattr(self.master, "late", 0))
         t = self.font.render(text, True, (240, 180, 70) if cut else (150, 220, 120))   # orange: hover it for the counts
-        win.blit(t, (x + 8, top + 5))
+        win.blit(t, (x + 8, top + (STATUS_H - t.get_height()) // 2))
         self.sound_rect = pygame.Rect(x + 8, top, t.get_width(), STATUS_H)
         return x + 8 + t.get_width()
 
@@ -1723,11 +1723,11 @@ class Deck:
         self.panel_rect = pygame.Rect(0, 0, 0, 0)
         self.copy_rect = pygame.Rect(0, 0, 0, 0)
         if not self.show_status:
-            # Hidden: the TOOLS button alone comes up when the mouse goes to the foot of the window, so that the line (in the menu) and the
-            # menu can always be reached
+            # Hidden: the PANEL and TOOLS buttons alone come up when the mouse goes to the foot of the window, so that the line (in the menu)
+            # and the menu can always be reached
             x, y = pygame.mouse.get_pos()
             if pygame.mouse.get_focused() and y >= h - STATUS_H:
-                self.draw_tools_button(w - 8, h - STATUS_H)
+                self.draw_tools_button(self.draw_panel_button(w - 8, h - STATUS_H).left - 6, h - STATUS_H)
             return
         bar = pygame.Rect(0, h - STATUS_H, w, STATUS_H)
         pygame.draw.rect(self.win, (18, 18, 20), bar)
@@ -1735,17 +1735,21 @@ class Deck:
             "Starting up" if self.link.connected else \
             f"Waiting for the emulator on {self.link.addr[0]}:{self.link.addr[1]}"
         color = (150, 220, 120) if self.link.connected else (240, 180, 70)
+        # The buttons at the right first (PANEL in the corner, the side it opens on, then TOOLS): the readouts on the left stop short of them
+        buttons = self.draw_tools_button(self.draw_panel_button(w - 8, bar.top).left - 6, bar.top).left
+        self.win.set_clip(pygame.Rect(0, bar.top, max(0, buttons - 8), STATUS_H))
         t = self.font.render(state, True, color)
-        self.win.blit(t, (10, bar.top + 5))
+        self.win.blit(t, (10, bar.centery - t.get_height() // 2))
         x = 10 + t.get_width()
         if self.link.connected:
             x = self.draw_sound(x + 14, bar.top)
+        self.win.set_clip(None)
         self.status_w = x - 10
         left = 10 + self.status_w + 30                      # the right readouts and the hint use the room from the left readouts on
         # From the right: the tools button, the level, how fast the sound comes, how much waits to be played, deckbench's decks. Each has a
         # place of the width of the most it can say, so that what one says changing does not move the rest (what does not fit is left out)
         win = self.win
-        x = self.draw_panel_button(self.draw_tools_button(w - 8, bar.top).left - 6, bar.top).left - 14
+        x = buttons - 14
         waiting = getattr(self.master, "waiting_ms", None)
         places = []
         chip_w = self.small.size("DECKBENCH")[0] + 14
@@ -1768,7 +1772,7 @@ class Deck:
                 seconds = int(self.rec.seconds()) if self.rec else 0
                 pygame.draw.circle(win, (230, 80, 70), (place.left + 5, bar.top + STATUS_H // 2), 4)
                 t = self.font.render("REC %02d:%02d" % (seconds // 60, seconds % 60) if seconds < 3600 else "REC %d:%02d:%02d" % (seconds // 3600, seconds // 60 % 60, seconds % 60), True, (230, 80, 70))
-                win.blit(t, (place.left + 14, bar.top + 5))
+                win.blit(t, (place.left + 14, bar.centery - t.get_height() // 2))
             elif kind == "level":
                 bar_rect = pygame.Rect(place.left, bar.top + 9, 64, 8)
                 level, hold, clipped = self.meter.level()
@@ -1783,10 +1787,10 @@ class Deck:
                 speed = self.meter.speed()
                 if speed is not None:
                     t = self.font.render("\u00d7%.2f" % speed, True, (150, 220, 120) if 0.97 <= speed <= 1.04 else (240, 180, 70))
-                    win.blit(t, (place.right - t.get_width(), bar.top + 5))
+                    win.blit(t, (place.right - t.get_width(), bar.centery - t.get_height() // 2))
             elif kind == "waits":
                 t = self.font.render(f"waits {waiting()} of {self.master.wait_ms} ms", True, (150, 152, 158))
-                win.blit(t, (place.right - t.get_width(), bar.top + 5))
+                win.blit(t, (place.right - t.get_width(), bar.centery - t.get_height() // 2))
             elif kind == "bench":
                 up = self.bench.up
                 label = self.small.render("DECKBENCH", True, (225, 228, 232) if up else (150, 152, 158))
@@ -1798,7 +1802,7 @@ class Deck:
                 pygame.draw.rect(win, (84, 86, 94) if self.hovering(whole) else (40, 41, 45), r, border_radius=4)
                 win.blit(label, label.get_rect(center=r.center))
                 if t.get_width():
-                    win.blit(t, (r.left - 8 - t.get_width(), bar.top + 5))      # right-aligned against the button: its words change in length
+                    win.blit(t, (r.left - 8 - t.get_width(), bar.centery - t.get_height() // 2))      # right-aligned against the button: its words change in length
                 self.bench_rect = whole
             x = place.left - 14
         # What is under the mouse, or when nothing is, the last thing done (a click copies it)
@@ -1821,7 +1825,7 @@ class Deck:
             t = self.font.render(text, True, colour) if text else self.small.render(versions[-1], True, colour)
             at = max(room.left, min(w // 2 - t.get_width() // 2, room.right - t.get_width()))      # in the middle of the window, if it fits
             win.set_clip(room)
-            win.blit(t, (at, bar.top + 5))
+            win.blit(t, (at, bar.centery - t.get_height() // 2))
             win.set_clip(None)
             if not self.hover:
                 self.copy_rect = pygame.Rect(at, bar.top, min(t.get_width(), room.width), STATUS_H)
