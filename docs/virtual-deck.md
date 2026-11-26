@@ -29,8 +29,8 @@ leaves the lines out, and a recording leaves them out too, as the reels frame th
 its brightness, the window is black only where nothing is, round the unit and between the boxes, and every pixel of the unit and of the
 boxes is at least 4 of 255 bright (the way the black reels are made), so a luma key of a few points takes out the background alone. That is
 how it starts (`--key 6` for a lift of 6, `--no-key` for the blacks as they are, and a `--record` is made without it). The status line at the
-foot is not kept off black: crop it, or hide it (F9). F10 hides that
-panel and narrows the window to the face (`--compact` starts that way). F12
+foot is not kept off black: crop it, or hide it (F9). F10, the PANEL
+button beside TOOLS or the tools menu hide that panel and narrow the window to the face (`--compact` starts that way). F12
 swaps the reminder for the lamp diagnostics: every two-level lamp by id, as
 the app sets it. The face is drawn as the unit looks (`--face real`, the default): black gloss plastic with a lit rim and raised
 rails down the sides, a bevelled housing for the screen with framed PROJECT, SAMPLING and FX buttons and a knurled encoder in a chrome ring, a chrome

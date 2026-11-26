@@ -78,9 +78,24 @@ def deck_checks(link, layout):
         sent = len(link.sent)
         deck.wheel(deck.lcd_rect.center, -1)            # the wheel over the screen turns the selector, to browse
         assert link.sent[sent:] == ["enc 0 -1"], link.sent[sent:]
+        if deck.panel_rect.width:                        # PANEL in the status line hides the side panel and narrows the window, then shows it
+            assert deck.find(deck.panel_rect.center) == ("panel",), deck.find(deck.panel_rect.center)
+            shown, wide = deck.show_dock, deck.win.get_width()
+            for _ in range(2):
+                deck.press(deck.panel_rect.center)
+                deck.release(deck.panel_rect.center)
+                deck.draw()
+                assert deck.show_dock != shown
+                if not deck.show_dock:
+                    assert deck.dock is None
+                    assert deck.win.get_width() <= wide, (layout.MODEL, size, wide, deck.win.get_width())
+                    left = deck.ox                                  # the black margins either side of the unit: the same
+                    right = deck.win.get_width() - deck.ox - deck.face_w
+                    assert abs(left - right) <= 1, (layout.MODEL, size, left, right)
+                shown, wide = deck.show_dock, deck.win.get_width()
         k, ox = deck.scale, deck.ox                      # the unit begins ox from the window's edge
         if layout.MODEL == "TORAIZ SP-16":
-            assert ox + deck.face.get_width() <= size[0]
+            assert ox + deck.face.get_width() <= deck.win.get_width()
             for i, key in enumerate(layout.KEYS):
                 if key.kind != "led":
                     x0, y0, x1, y1 = key.bounds()

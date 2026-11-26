@@ -426,6 +426,7 @@ class Deck:
         self.menu_open = False           # the tools menu (F8)
         self.menu_items, self.menu_rects, self.menu_panel = [], [], pygame.Rect(0, 0, 0, 0)
         self.tools_rect = pygame.Rect(0, 0, 0, 0)
+        self.panel_rect = pygame.Rect(0, 0, 0, 0)       # the PANEL button of the status line: the side panel shown or not
         self.copy_rect = pygame.Rect(0, 0, 0, 0)
         self.last_action = ""            # the last thing done with the mouse, as a line for an episode script (a click copies it)
         self.on_top = False
@@ -559,8 +560,10 @@ class Deck:
     def toggle_dock(self):
         """Shows or hides the side panel, and sizes the window to what is left."""
         self.show_dock = not self.show_dock
-        _, h = self.win.get_size()
-        self.win = pygame.display.set_mode((self.fit(h), h), pygame.RESIZABLE)
+        w, h = self.win.get_size()
+        # hidden, it never widens the window (the SP-16's face, wider than tall, would take the width of its height)
+        w = self.fit(h) if self.show_dock else min(self.fit(h), w)
+        self.win = pygame.display.set_mode((w, h), pygame.RESIZABLE)
         self.layout()
         self.keep_on_top()
 
@@ -716,6 +719,7 @@ class Deck:
         items = [("Keyable background (luma key)", "check", lambda: bool(self.lift), self.toggle_key),
                  ("Side panel outline", "check", lambda: self.outline, self.toggle_outline),
                  ("Status line  (F9)", "check", lambda: self.show_status, self.toggle_status),
+                 ("Side panel  (F10)", "check", lambda: self.show_dock, self.toggle_dock),
                  ("Always on top", "check", lambda: self.on_top, self.toggle_on_top),
                  (lambda: "Pad velocity  " + ("by position" if self.velocity is None else f"{self.velocity}%"), "stepper", None, self.step_velocity),
                  ("Window larger", "action", None, lambda: self.resize(1.1)),
@@ -789,6 +793,8 @@ class Deck:
                 return ("toolbg",)
         if self.tools_rect.collidepoint(pos):
             return ("tools",)
+        if self.panel_rect.collidepoint(pos):
+            return ("panel",)
         if self.bench_rect.collidepoint(pos):
             return ("bench",)
         if self.copy_rect.collidepoint(pos):
@@ -833,6 +839,8 @@ class Deck:
     def describe(self, what):
         if not what:
             return ""
+        if what[0] == "panel":
+            return ("hide" if self.show_dock else "show") + " the side panel: the large screen, the mods and the keys  ·  F10"
         if what[0] == "tools":
             return "tools: keyable background, lines, window size, USB stick, how long the sound waits  \u00b7  F8"
         if what[0] == "tool":
@@ -1028,6 +1036,9 @@ class Deck:
             return
         if what[0] == "tools":
             self.toggle_menu()
+            return
+        if what[0] == "panel":
+            self.toggle_dock()
             return
         if what[0] == "toolbg":
             return
@@ -1669,7 +1680,7 @@ class Deck:
     def update_cursor(self):
         """The mouse is a hand over the status line's buttons (the TOOLS button, the MASTER / PHONES switch, deckbench's button and the hint that
         copies), an arrow elsewhere."""
-        hand = any(r.width and self.hovering(r) for r in (self.tools_rect, self.listen_rect, self.bench_rect, self.copy_rect))
+        hand = any(r.width and self.hovering(r) for r in (self.tools_rect, self.panel_rect, self.listen_rect, self.bench_rect, self.copy_rect))
         if hand != getattr(self, "_hand", False):
             self._hand = hand
             try:
@@ -1689,11 +1700,27 @@ class Deck:
         self.tools_rect = r
         return r
 
+    def draw_panel_button(self, right, top):
+        """The PANEL button, its right edge at `right`: lit while the side panel is shown, its arrow the way a click moves it. Returns
+        where it is."""
+        win = self.win
+        on = self.show_dock
+        t = self.small.render("PANEL", True, (10, 10, 10) if on else (200, 203, 208))
+        r = pygame.Rect(right - t.get_width() - 24, top + 4, t.get_width() + 24, STATUS_H - 8)
+        pygame.draw.rect(win, (150, 220, 120) if on else (62, 64, 70) if self.hovering(r) else (40, 41, 45), r, border_radius=4)
+        win.blit(t, (r.left + 8, r.centery - t.get_height() // 2))
+        x, y = r.right - 10, r.centery
+        tip = [(x + 3, y - 4), (x + 3, y + 4), (x - 3, y)] if not on else [(x - 3, y - 4), (x - 3, y + 4), (x + 3, y)]
+        pygame.draw.polygon(win, (10, 10, 10) if on else (200, 203, 208), tip)
+        self.panel_rect = r
+        return r
+
     def draw_status(self):
         w, h = self.win.get_size()
         over = self.copy_rect.collidepoint(pygame.mouse.get_pos())
         self.bench_rect = pygame.Rect(0, 0, 0, 0)
         self.tools_rect = pygame.Rect(0, 0, 0, 0)
+        self.panel_rect = pygame.Rect(0, 0, 0, 0)
         self.copy_rect = pygame.Rect(0, 0, 0, 0)
         if not self.show_status:
             # Hidden: the TOOLS button alone comes up when the mouse goes to the foot of the window, so that the line (in the menu) and the
@@ -1718,7 +1745,7 @@ class Deck:
         # From the right: the tools button, the level, how fast the sound comes, how much waits to be played, deckbench's decks. Each has a
         # place of the width of the most it can say, so that what one says changing does not move the rest (what does not fit is left out)
         win = self.win
-        x = self.draw_tools_button(w - 8, bar.top).left - 14
+        x = self.draw_panel_button(self.draw_tools_button(w - 8, bar.top).left - 6, bar.top).left - 14
         waiting = getattr(self.master, "waiting_ms", None)
         places = []
         chip_w = self.small.size("DECKBENCH")[0] + 14
