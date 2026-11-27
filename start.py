@@ -249,9 +249,16 @@ F="${DJS_HOME:-$HOME/djs}/run/autoexec/modlist.txt"
 # A copy that stopped part way leaves .slot-copying behind, and is done again (the app alone does not make a slot).
 [ -x "$DJS_HOME/root/root/pdj/$APP_NAME" ] && [ ! -e "$DJS_HOME/.slot-copying" ] && exit 0
 [ -x "$BASE_HOME/root/root/pdj/$APP_NAME" ] || exit 0    # run.sh then says what is missing
+# Under the slot's lock (see start()): busy, the slot is another launch's, which copies or runs it.
+exec 7> "/tmp/.djsemu-slot-${DJSDEV_TAG:-main}.lock"
+flock -n 7 || exit 0
 mkdir -p "$DJS_HOME"
 : > "$DJS_HOME/.slot-copying"
-cp -a "$BASE_HOME/aes256.key" "$DJS_HOME/" 2> /dev/null
+if [ -e "$BASE_HOME/aes256.key" ]; then
+    cp -a "$BASE_HOME/aes256.key" "$DJS_HOME/" 2> /dev/null
+    cmp -s "$BASE_HOME/aes256.key" "$DJS_HOME/aes256.key" || {
+        echo "could not copy the key to $DJS_HOME: the next start copies again"; exit 1; }
+fi
 if command -v rsync > /dev/null; then rsync -a "$BASE_HOME/root/" "$DJS_HOME/root/" 2> /dev/null
 else cp -a "$BASE_HOME/root" "$DJS_HOME/" 2> /dev/null; fi
 # Placeholders the guest must not read (mode 000, such as etc/ld.so.preload) cannot be copied: the same, empty.
@@ -284,10 +291,12 @@ PID=$(pids_of "$APP_PATTERN" | head -1)
         self.ensure_home()
         code, out = self.sh("""
 RUN="${DJS_HOME:-$HOME/djs}/run"
-# The slot's lock (scripts/run.sh holds it): a slot in use is told before its log is touched.
-flock -n "/tmp/.djsemu-slot-${DJSDEV_TAG:-main}.lock" true 2> /dev/null || { echo "slot ${DJSDEV_TAG:-main} is in use by another emulator"; exit 75; }
+# The slot's lock, taken here and handed to the runner (scripts/run.sh), which holds it with its guest: a slot in use
+# is told before its log is touched, and whatever runs in the slot from now on is this launch's.
+exec 7> "/tmp/.djsemu-slot-${DJSDEV_TAG:-main}.lock"
+flock -n 7 || { echo "slot ${DJSDEV_TAG:-main} is in use by another emulator"; exit 75; }
 mkdir -p "$RUN"
-DJSDEV_PORT=%d DJS_WINDOW=%s %s setsid nohup bash %s/scripts/run.sh 0 > "$RUN/emulator.log" 2>&1 < /dev/null &
+DJSEMU_SLOT_LOCK=7 DJSDEV_PORT=%d DJS_WINDOW=%s %s setsid nohup bash %s/scripts/run.sh 0 > "$RUN/emulator.log" 2>&1 < /dev/null &
 runner=$!
 for i in $(seq 1 360); do
     kill -0 "$runner" 2>/dev/null || break
