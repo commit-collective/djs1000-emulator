@@ -135,7 +135,26 @@ fi
         self.assertEqual(len(backups), 1)
         self.assertEqual((backups[0] / "root/data/settings").read_text(), "keep me")
         self.assertEqual((self.destination / "usb/project").read_text(), "project")
-        self.assertTrue((self.destination / ".djs1000-emu").exists())
+        self.assertEqual((self.destination / ".djs1000-emu").read_text(), "djs1000\n")
+
+    def test_rebuild_refuses_the_other_units_home(self):
+        self.existing()
+        (self.destination / ".djs1000-emu").touch()          # as setups before the unit was named leave it
+        self.env["TEST_APP"] = "EP085_Main_R"
+        run = self.run_setup(rebuild=True, unit="sp16")
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("holds the djs1000 installation", run.stderr)
+        self.assertEqual((self.destination / "root/root/pdj/EP113_Main_R").read_text(), "old application")
+        self.assertEqual(list(self.destination.glob("previous.*")), [])
+
+    def test_rebuild_refuses_the_unit_its_marker_names(self):
+        self.existing()
+        (self.destination / ".djs1000-emu").write_text("djs1000\n")
+        (self.destination / "root/root/pdj/EP113_Main_R").unlink()
+        self.env["TEST_APP"] = "EP085_Main_R"
+        run = self.run_setup(rebuild=True, unit="sp16")
+        self.assertNotEqual(run.returncode, 0)
+        self.assertIn("holds the djs1000 installation", run.stderr)
 
     def test_expected_unprivileged_device_node_errors_are_allowed(self):
         self.env["FAIL_TAR"] = "node"

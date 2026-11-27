@@ -50,6 +50,16 @@ if [ -d "$DJS" ] && [ -n "$(find "$DJS" -mindepth 1 -maxdepth 1 ! -name '.setup.
         echo "$DJS is not empty. Use --rebuild to back up and replace its firmware files." >&2
         exit 1
     fi
+    # The unit installed there: the marker names it (older setups left it empty), else the app in its root.
+    INSTALLED="$(head -n 1 "$DJS/.djs1000-emu" 2> /dev/null || true)"
+    if [ -z "$INSTALLED" ]; then
+        [ -e "$DJS/root/root/pdj/EP113_Main_R" ] && INSTALLED=djs1000
+        [ -e "$DJS/root/root/pdj/EP085_Main_R" ] && INSTALLED=sp16
+    fi
+    if [ -n "$INSTALLED" ] && [ "$INSTALLED" != "${DJSDEV_UNIT:-djs1000}" ]; then
+        echo "$DJS holds the $INSTALLED installation. Give the ${DJSDEV_UNIT:-djs1000} a home of its own (DJS_HOME)." >&2
+        exit 1
+    fi
     if [ ! -f "$DJS/.djs1000-emu" ] && [ ! -f "$DJS/root$APP" ]; then
         echo "$DJS is not a recognised installation. Choose an empty folder." >&2
         exit 1
@@ -122,7 +132,7 @@ if [ "$KEY" != "$(readlink -f "$DJS/aes256.key")" ]; then
     install -m 600 "$KEY" "$DJS/aes256.key"
 fi
 chmod 600 "$DJS/aes256.key"
-touch "$DJS/.djs1000-emu"
+printf '%s\n' "${DJSDEV_UNIT:-djs1000}" > "$DJS/.djs1000-emu"
 echo "Previous files, if any: $BACKUP"
 cd "$DJS"
 echo "ready: $DJS/root ($(du -sh root | cut -f1)), firmware $(cat iso/images/release.txt 2>/dev/null)"
