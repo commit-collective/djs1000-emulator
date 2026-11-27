@@ -209,8 +209,8 @@ To give WSL the Windows adapters (mirrored networking):
 4. Start the emulator again. **Tools > Network adapter** now lists the Windows
    adapters, the DJ one included.
 
-Mirrored mode lists the adapters. Pro DJ Link through it is not validated yet:
-check that the players are seen. WSL and Windows then share their ports, so a
+Mirrored mode lists the adapters, and the emulator joins the real players'
+Pro DJ Link through it. WSL and Windows then share their ports, so a
 Windows program cannot listen on a port a WSL program already uses (Deckbench
 on 8750 in both, for example). See Microsoft's
 [WSL networking guide](https://learn.microsoft.com/en-us/windows/wsl/networking).
