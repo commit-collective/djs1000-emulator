@@ -242,16 +242,17 @@ F="${DJS_HOME:-$HOME/djs}/run/autoexec/modlist.txt"
     def starting(self):
         return self.sh(self.starting_cmd)[0] == 0
 
-    def ensure_home(self):
-        """The slot's home, made from the selected unit home the first time (the unit's root file system and the key: 250 MB)."""
-        if self.tag:
-            code, out = self.sh("""
+    # The copy of a slot's home (see ensure_home), for a shell that holds the slot's lock: 0 when the slot is complete,
+    # 1 (with what failed) when not.
+    SEED = """
 # A copy that stopped part way leaves .slot-copying behind, and is done again (the app alone does not make a slot).
 [ -x "$DJS_HOME/root/root/pdj/$APP_NAME" ] && [ ! -e "$DJS_HOME/.slot-copying" ] && exit 0
-[ -x "$BASE_HOME/root/root/pdj/$APP_NAME" ] || exit 0    # run.sh then says what is missing
-# Under the slot's lock (see start()): busy, the slot is another launch's, which copies or runs it.
-exec 7> "/tmp/.djsemu-slot-${DJSDEV_TAG:-main}.lock"
-flock -n 7 || exit 0
+if [ ! -x "$BASE_HOME/root/root/pdj/$APP_NAME" ]; then
+    # A copy left part way cannot be finished without the unit's home. Without either, run.sh says what is missing.
+    [ -e "$DJS_HOME/.slot-copying" ] || exit 0
+    echo "$DJS_HOME was not copied completely and $BASE_HOME has no installation to finish it from (run scripts/setup.sh)"
+    exit 1
+fi
 mkdir -p "$DJS_HOME"
 : > "$DJS_HOME/.slot-copying"
 if [ -e "$BASE_HOME/aes256.key" ]; then
@@ -275,7 +276,14 @@ else
     echo "the copy of $BASE_HOME/root to $DJS_HOME is not complete (is the disk full?): the next start copies again"
     exit 1
 fi
-""")
+"""
+
+    def ensure_home(self):
+        """The slot's home, made from the selected unit home the first time (the unit's root file system and the key: 250 MB).
+        Under the slot's lock: busy, another launch has the slot, and start() copies again under the lock it takes."""
+        if self.tag:
+            code, out = self.sh('exec 7> "/tmp/.djsemu-slot-${DJSDEV_TAG:-main}.lock"\nflock -n 7 || exit 0\n(' +
+                                self.SEED + ')')
             if code:
                 sys.exit(out.strip())
 
@@ -288,13 +296,15 @@ PID=$(pids_of "$APP_PATTERN" | head -1)
 """ % ((shlex.quote(self.repo()),) * 3))[0] == 0
 
     def start(self):
-        self.ensure_home()
+        seed = "(" + self.SEED + ") || exit 76" if self.tag else ""
         code, out = self.sh("""
 RUN="${DJS_HOME:-$HOME/djs}/run"
 # The slot's lock, taken here and handed to the runner (scripts/run.sh), which holds it with its guest: a slot in use
 # is told before its log is touched, and whatever runs in the slot from now on is this launch's.
 exec 7> "/tmp/.djsemu-slot-${DJSDEV_TAG:-main}.lock"
 flock -n 7 || { echo "slot ${DJSDEV_TAG:-main} is in use by another emulator"; exit 75; }
+# A slot is checked (and copied if need be) under the same lock, which it keeps until its runner has it.
+%s
 mkdir -p "$RUN"
 DJSEMU_SLOT_LOCK=7 DJSDEV_PORT=%d DJS_WINDOW=%s %s setsid nohup bash %s/scripts/run.sh 0 > "$RUN/emulator.log" 2>&1 < /dev/null &
 runner=$!
@@ -309,7 +319,9 @@ fi
 kill -0 "$runner" 2>/dev/null && echo "no app or boot menu after 3 minutes"
 kill -TERM -- "-$runner" 2>/dev/null || true
 tail -n 15 "$RUN/emulator.log"; exit 1
-""" % (self.port, "1" if self.window else "", self.env, shlex.quote(self.repo()), self.session_cmd))
+""" % (seed, self.port, "1" if self.window else "", self.env, shlex.quote(self.repo()), self.session_cmd))
+        if code == 76:                  # the slot could not be copied: nothing was started
+            sys.exit(out.strip())
         if code == 75:                  # another launch has the slot: its processes are not this one's to stop
             sys.exit("the emulator did not start: " + out.strip())
         if code:
