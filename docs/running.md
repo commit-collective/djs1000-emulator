@@ -27,12 +27,13 @@ Use `--unit sp16` for `status` and `stop` as well as for starting the
 deck. The USB folder is `~/sp16/usb` by default. SP-16 and DJS-1000 use
 separate firmware and settings folders, and share the default deck port
 7310. Stop the running unit before starting the other in the same slot.
+A custom `DJS_HOME` holds one unit: setup refuses to rebuild it as the other.
 
-The SP-16 deck plays the stock app's master stereo pair in the default
-output mode and accepts stereo input from the host. When the firmware
-sends sound to its phones PCM, the deck can play it as a second stereo
-output. Assignable outputs terminate at the backend and the analog filter
-return supplies silence. See [the SP-16 audio profile](emulation.md#sp-16-profile).
+The SP-16 deck plays the stock app's MAIN stereo pair and accepts stereo
+input from the host. The status line's switch, or Tab, plays OUT 3-4, 5-6
+or 7-8 in its place, or the headphones. A recording takes the one chosen.
+The analog filter return supplies silence. See
+[the SP-16 audio profile](emulation.md#sp-16-profile).
 
 For Pro DJ Link sync, set **UTILITY > SYNC SOURCE SELECT** to **PRO DJ LINK**.
 Start playback on the master deck in Deckbench. Then select **AUTO** or its
