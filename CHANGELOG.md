@@ -2,17 +2,26 @@
 
 Newest first. A release is a tagged commit.
 
-## Unreleased
+## v0.5.0
 
-- `tools/freesp16_smoke.py` runs freesp16's emulator smoke test on the SP-16 or the DJS-1000, its renderer comparison included.
+Tested on WSL2 with Ubuntu 24.04. The regression session comes out identical to the reference, the deck's self-test
+passes, setup was run from scratch into a new folder, and the mods' release suite ran in four slots side by side.
+
+- Run TORAIZ SP-16 firmware 1.60 with `--unit sp16`, with the hardware layout on its virtual deck, dedicated audio
+  (S24_LE and S16_LE too on the AK4452 streams, for other apps, and the assignable outputs OUT 3-4, 5-6 and 7-8 on the
+  status line's switch) and Pro DJ Link sync.
+- The PANEL button right of TOOLS (or F10) hides the deck's side panel and narrows the window to the face. `--compact`
+  starts that way, and the SP-16 always does unless `--panel` is given.
+- `tools/freesp16_smoke.py` runs freesp16's emulator smoke test on the SP-16 or the DJS-1000, its renderer comparison
+  included.
 - `tools/freesp16_bench.py` builds and runs freesp16's device benches on the SP-16 or the DJS-1000.
-- Run TORAIZ SP-16 firmware 1.60 with `--unit sp16`, with the hardware layout on its virtual deck, dedicated audio (S24_LE and S16_LE too on the AK4452 streams, for other apps, and the assignable outputs OUT 3-4, 5-6 and 7-8 on the status line's switch) and Pro DJ Link sync.
-- The PANEL button right of TOOLS (or F10) hides the deck's side panel and narrows the window to the face. `--compact` starts that way, and the SP-16 always does unless `--panel` is given.
+- The repository is now named `djs1000-emulator`. GitHub forwards the old name.
 
 ### Fixes
 
 - A boot menu from the stick that stopped the app no longer ends the emulator after 25 seconds, with its screen.
-- Each slot's guest sees only its own processes, with PRoot too, so a boot menu in one slot no longer stops the app in the others.
+- Each slot's guest sees only its own processes, with PRoot too, so a boot menu in one slot no longer stops the app in
+  the others.
 - A new slot is made from its unit's home on its first start, instead of failing with "no rootfs".
 - With `DJS_FAST_BOOT`, a stick that shows a boot menu or starts its own app is no longer stopped after 3 minutes.
 
