@@ -24,6 +24,13 @@ shift || true
 TAG="${DJSDEV_TAG:-}"
 export DJSDEV_TAG="$TAG"
 . "$REPO/scripts/guest-pids.sh"
+# One emulator a slot, whichever unit (both share its tag and ports): a lock held while this script runs, and by the
+# guest, which inherits it. A launch that cannot take it ends with 75 and touches nothing (start.py).
+exec 7> "/tmp/.djsemu-slot-${TAG:-main}.lock"
+if ! flock -n 7; then
+    echo "slot ${TAG:-main} is in use by another emulator" >&2
+    exit 75
+fi
 
 if [ -n "$(pids_of "(/root/pdj/|[.]/)EP(085|113)_Main_R|/opt/djsemu/init.sh")" ]; then
     echo "the emulator is already running: stop it first (python start.py stop)" >&2

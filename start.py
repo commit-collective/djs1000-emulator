@@ -245,7 +245,7 @@ F="${DJS_HOME:-$HOME/djs}/run/autoexec/modlist.txt"
     def ensure_home(self):
         """The slot's home, made from the selected unit home the first time (the unit's root file system and the key: 250 MB)."""
         if self.tag:
-            self.sh("""
+            code, out = self.sh("""
 # A copy that stopped part way leaves .slot-copying behind, and is done again (the app alone does not make a slot).
 [ -x "$DJS_HOME/root/root/pdj/$APP_NAME" ] && [ ! -e "$DJS_HOME/.slot-copying" ] && exit 0
 [ -x "$BASE_HOME/root/root/pdj/$APP_NAME" ] || exit 0    # run.sh then says what is missing
@@ -259,14 +259,18 @@ else cp -a "$BASE_HOME/root" "$DJS_HOME/" 2> /dev/null; fi
     if [ -d "$BASE_HOME/root/$p" ]; then mkdir -p "$DJS_HOME/root/$p"; else : > "$DJS_HOME/root/$p"; fi
     chmod 000 "$DJS_HOME/root/$p"
 done
-# Done once the slot holds every name the unit's home has (the copy's exit codes count the placeholders as errors).
-if [ "$(cd "$BASE_HOME/root" && find . 2> /dev/null | sort | cksum)" = "$(cd "$DJS_HOME/root" && find . 2> /dev/null | sort | cksum)" ]; then
+# Done once the slot holds every name the unit's home has, each readable file at its size (the copy's exit codes
+# count the placeholders as errors, and a file cut short keeps its name).
+listing() { cd "$1" && find . -type f -perm -u=r -printf '%p f %s\\n' -o -printf '%p %y\\n' 2> /dev/null | sort | cksum; }
+if [ "$(listing "$BASE_HOME/root")" = "$(listing "$DJS_HOME/root")" ]; then
     rm -f "$DJS_HOME/.slot-copying"
 else
-    echo "the copy of $BASE_HOME/root is not complete: the next start copies again"
+    echo "the copy of $BASE_HOME/root to $DJS_HOME is not complete (is the disk full?): the next start copies again"
+    exit 1
 fi
-true
 """)
+            if code:
+                sys.exit(out.strip())
 
     def stale(self):
         """Whether the running emulator started before the shim's source (or
@@ -280,6 +284,8 @@ PID=$(pids_of "$APP_PATTERN" | head -1)
         self.ensure_home()
         code, out = self.sh("""
 RUN="${DJS_HOME:-$HOME/djs}/run"
+# The slot's lock (scripts/run.sh holds it): a slot in use is told before its log is touched.
+flock -n "/tmp/.djsemu-slot-${DJSDEV_TAG:-main}.lock" true 2> /dev/null || { echo "slot ${DJSDEV_TAG:-main} is in use by another emulator"; exit 75; }
 mkdir -p "$RUN"
 DJSDEV_PORT=%d DJS_WINDOW=%s %s setsid nohup bash %s/scripts/run.sh 0 > "$RUN/emulator.log" 2>&1 < /dev/null &
 runner=$!
@@ -288,10 +294,15 @@ for i in $(seq 1 360); do
     %s && exit 0
     sleep 0.5
 done
+if ! kill -0 "$runner" 2>/dev/null; then
+    wait "$runner"; [ $? = 75 ] && { tail -n 1 "$RUN/emulator.log"; exit 75; }
+fi
 kill -0 "$runner" 2>/dev/null && echo "no app or boot menu after 3 minutes"
 kill -TERM -- "-$runner" 2>/dev/null || true
 tail -n 15 "$RUN/emulator.log"; exit 1
 """ % (self.port, "1" if self.window else "", self.env, shlex.quote(self.repo()), self.session_cmd))
+        if code == 75:                  # another launch has the slot: its processes are not this one's to stop
+            sys.exit("the emulator did not start: " + out.strip())
         if code:
             self.stop()
             sys.exit("the emulator did not start:\n" + out)
