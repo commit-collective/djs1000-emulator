@@ -4,41 +4,58 @@ Newest first. A release is a tagged commit.
 
 ## v0.5.0
 
-Tested on WSL2 with Ubuntu 24.04. The regression session comes out identical to the reference, the deck's self-test
-passes, setup was run from scratch into a new folder, and the mods' release suite ran in four slots side by side.
+The TORAIZ SP-16 runs in the emulator, with its own deck.
 
-- Run TORAIZ SP-16 firmware 1.60 with `--unit sp16`, with the hardware layout on its virtual deck, dedicated audio
-  (S24_LE and S16_LE too on the AK4452 streams, for other apps, and the assignable outputs OUT 3-4, 5-6 and 7-8 on the
-  status line's switch) and Pro DJ Link sync.
-- The PANEL button right of TOOLS (or F10) hides the deck's side panel and narrows the window to the face. `--compact`
-  starts that way, and the SP-16 always does unless `--panel` is given.
-- `tools/freesp16_smoke.py` runs freesp16's emulator smoke test on the SP-16 or the DJS-1000, its renderer comparison
-  included.
-- `tools/freesp16_bench.py` builds and runs freesp16's device benches on the SP-16 or the DJS-1000.
-- The repository is now named `djs1000-emulator`. GitHub forwards the old name.
+### Compatibility changes
+
+- The repository is now `djs1000-emulator`. GitHub forwards the old name.
+
+### SP-16
+
+- Run SP-16 firmware 1.60 with `--unit sp16`, on a deck laid out like the unit.
+- Its assignable outputs OUT 3-4, 5-6 and 7-8 can be heard, chosen on the status line.
+- It syncs over Pro DJ Link.
+
+### The deck
+
+- PANEL, right of TOOLS (or F10), hides the side panel and narrows the window to the face. `--compact` starts that
+  way, and the SP-16 always does unless `--panel` is given.
+
+### Tools
+
+- `tools/freesp16_smoke.py` and `tools/freesp16_bench.py` run freesp16's smoke test and device benches on either unit.
 
 ### Fixes
 
-- A boot menu from the stick that stopped the app no longer ends the emulator after 25 seconds, with its screen.
-- Each slot's guest sees only its own processes, with PRoot too, so a boot menu in one slot no longer stops the app in
-  the others.
-- A new slot is made from its unit's home on its first start, instead of failing with "no rootfs".
+- A boot menu from the stick that stopped the app no longer ends the emulator after 25 seconds.
+- A boot menu in one slot no longer stops the app in the others.
 - With `DJS_FAST_BOOT`, a stick that shows a boot menu or starts its own app is no longer stopped after 3 minutes.
 
 ## v0.4.0
 
-Tested on WSL2 with Ubuntu 24.04. The regression session comes out identical to the reference, the deck's self-test
-passes, setup was run from scratch into a new folder, and two test slots ran side by side. One user ran it on an Apple
-Silicon Mac through the Lima template.
+The emulator runs on a Mac through a Linux VM, and works with real players on the network through Deckbench.
+
+### Compatibility changes
+
+- The app keeps the host's clock by default, as the unit has one clock. `--pace` paces it to the sound card instead.
+- A Deckbench started by an older launcher is not tracked. Stop it by hand once, or attach to it with `--bench-url`.
+
+### Platforms
 
 - On a Mac, the emulator runs in a Linux VM made from the Lima template, `scripts/lima/djs1000.yaml`.
-- The mouse wheel turns the selector anywhere on the deck but over another knob.
-- The deck's mod switches and input watch use the stick's `djs1000-mods` folder, or its top for older patches.
+- The launcher says when `systemd-timesyncd` and WSL both set WSL's clock, which made the app's tempo swing.
+
+### Network and Deckbench
+
 - The backend's network adapter and address are chosen in the Tools menu or with `--network-picker`.
 - With a DJ adapter chosen, the launcher starts a Deckbench that watches the real players and the DJS.
 - `--bench-url URL` uses a Deckbench that is already running, and `--no-bench` runs without one.
 - The launcher's Deckbench takes a free port when a bench closed a moment ago still holds 8750.
-- The launcher says when `systemd-timesyncd` and WSL both set WSL's clock, which made the app's tempo swing.
+
+### The deck
+
+- The mouse wheel turns the selector anywhere on the deck but over another knob.
+- The deck's mod switches and input watch use the stick's `djs1000-mods` folder, or its top for older patches.
 
 ### Fixes
 
@@ -50,137 +67,129 @@ Silicon Mac through the Lima template.
 - Switching a mod on the deck keeps the settings file whole, CRLF line endings included.
 - A script that stops reading the deck link no longer holds up the deck's screen and sound.
 
-### Compatibility
-
-- The app keeps the host's clock by default, as the unit has one clock. `--pace` paces it to the sound card instead.
-- A Deckbench started by an older launcher is not tracked. Stop it by hand once, or attach to it with `--bench-url`.
-
 ## v0.3.1
 
-Tested on WSL2 with Ubuntu 24.04. The regression session comes out identical to the reference, the deck's self-test passes, and
-setup was run from scratch into a new folder.
+The app's sound keeps time with the deck, with no more skipped beats on WSL.
 
-- The app's sound is paced by the deck's sound card, not the host's clock. On WSL the clock ran about 7 % fast, so time in the
-  app ran fast too, and the deck cut 400 ms of sound every few seconds to catch up: a skipped beat about once a pattern, and
-  sound behind the screen. `--no-pace` brings back the old pacing, and `DJS_AUDIO_STATS=1` prints the speeds every 10 s.
-- The deck keeps 250 ms of sound waiting by default (`--audio-buffer`, 150 before), so a short stall of the app no longer runs it
-  dry.
-- The sound's cuts, and the times the deck asked for sound late, are the status line's hint for the sound device, kept up to date
-  while it is hovered. The device's name turns orange once either has happened.
+### Compatibility changes
+
+- The app's sound is paced by the deck's sound card, not the host's clock. `--no-pace` brings back the old pacing.
+- The deck keeps 250 ms of sound waiting by default (`--audio-buffer`, 150 before).
+
+### The deck
+
+- The status line's hint for the sound device counts the sound's cuts and late requests. The device's name turns
+  orange once either has happened.
+- `DJS_AUDIO_STATS=1` prints the sound's speeds every 10 seconds.
+
+### Docs
+
 - The docs keep to what runs the emulator. The hardware and power pages are gone, and the update file page is shorter.
-- The regression check times its sequence's STOP by the sound the app has played, not by this machine's clock. WSL's clock
-  runs a few percent away from Windows', by a different amount from week to week, and STOP fell into the last sound's tail,
-  so the check failed now and then with nothing wrong. `Session.frames_heard()` counts that sound for other scripts.
+
+### Fixes
+
+- On WSL, the app no longer skips a beat about once a pattern, and its sound no longer lags behind the screen.
 
 ## v0.3.0
 
-Tested on WSL2 with Ubuntu 24.04. The regression session comes out identical to the reference, the deck's self-test passes, and
-setup was run from scratch into a new folder.
+The deck records itself, and the videos made from it come in more sizes. Setup no longer overwrites an installation.
+
+### Compatibility changes
+
+- Setup refuses to replace an existing installation unless `--rebuild` is given, which backs up its firmware files
+  and settings.
 
 ### The virtual deck
 
-- REC (the first row of the TOOLS menu, or F7) records the window and its sound to `demo/captures`. It writes the video, the sound
-  alone, and a script of every command the deck sent, which `tools/reel.py` plays again on a fresh unit to make a reel. It needs
-  `ffmpeg`.
-- A TOOLS menu (F8) and a status line with readings: the master's level, how fast the sound arrives, and how much sound waits to be
-  played. With the mouse over nothing the line shows your last action as a line for a script, and a click copies it.
-- A right click on a pad or a step key holds it down until it is clicked again. The pad velocity can be set from the menu.
-- The sound is buffered more and its cuts are counted (`--audio-buffer MS`, default 150). `--audio-block FRAMES` is the block given to
-  the sound card, and a bigger one rides out a busy deck.
-- The deck has a window icon (the CC mark) and a layout centred in the window. The status line's buttons light up under the mouse
-  and show a hand cursor. A right-click-held key's ring is smoother. Held pads and step keys show only the unit's lamps, so a pad flashes only when the app flashes it.
-- A DECKBENCH button in the status line, beside TOOLS. With deckbench running, its actions are recorded beside a REC and played
-  back, and the INPUT SOURCE knob of LIVE SAMPLING picks which deckbench deck the app hears.
-- The unit's internal storage is bound in from `$DJS_EMMC`, or from `~/djs/emmc` when that holds a `PIONEER DJ SAMPLER` folder.
+- REC (the first row of the TOOLS menu, or F7) records the window, its sound and a script of every command to
+  `demo/captures`. `tools/reel.py` plays the script again on a fresh unit. It needs `ffmpeg`.
+- A TOOLS menu (F8) and a status line with the master's level and the sound's timing. Over nothing, the line shows
+  your last action as a line for a script, and a click copies it.
+- A right click on a pad or a step key holds it down until it is clicked again. The pad velocity is set in the menu.
+- `--audio-buffer MS` (default 150) and `--audio-block FRAMES` set the sound's buffering. Its cuts are counted.
+- The deck has a window icon and a centred layout. The status line's buttons light up under the mouse.
+- A DECKBENCH button beside TOOLS. Deckbench's actions are recorded with a REC and played back, and the INPUT SOURCE
+  knob of LIVE SAMPLING picks the Deckbench deck the app hears.
+- The unit's internal storage is bound in from `$DJS_EMMC`, or from `~/djs/emmc` when that holds a `PIONEER DJ
+  SAMPLER` folder.
 
 ### Videos
 
-- Resolutions (`--res hd`, `2k`, `4k`), keyable backgrounds (`--bg black`, `green`, `transparent`) and a clean video without text.
-  A reel is made as the website's hero shape at 2K unless the episode says another. The clean hero panels fill the height and line up
-  with the unit's case.
-- The video is H.264 at a higher quality for editing. The sound is written whole beside it at 48 kHz with the pitch kept, as 320k AAC
-  inside the video.
-- A reel can replay a REC with its project and moving knobs and show the mods panel. `--status` shows the deck's status line, and
-  REC videos keep it. A step can take `# before:` setup lines.
+- Resolutions (`--res hd`, `2k`, `4k`), keyable backgrounds (`--bg black`, `green`, `transparent`) and a clean video
+  without text. A reel is made in the website's hero shape at 2K unless the episode says another.
+- The video is H.264 at a higher quality for editing. The sound is also written whole beside it, at 48 kHz.
+- A reel can replay a REC with its project and moving knobs, and show the mods panel. `--status` shows the deck's
+  status line. A step can take `# before:` setup lines.
 
 ### Setup
 
-- Setup extracts into a staging folder before replacing an installation. An existing installation needs `--rebuild`,
-  which backs up its previous firmware files and settings. Unsafe or unrecognised destinations are rejected.
-- Unexpected archive extraction errors stop setup instead of leaving an incomplete installation marked ready.
-- Setup's rejection and staging paths have firmware-free tests (`tools/test_setup.py`), and a GitHub Action runs them.
-
-### Fixes
-
-- The deck gives deckbench's address as 127.0.0.1, because from Windows to WSL `localhost` waited 2 seconds on every new connection.
+- Setup extracts into a staging folder first, and stops on an extraction error instead of leaving an incomplete
+  installation. Unsafe or unrecognised destinations are refused.
 
 ### Docs
 
-- The README focuses on first use. `docs/running.md` covers off-screen interaction, scripting and platform details.
-- Linux virtual machines on macOS are described as untested, not unsupported. The launcher does not manage the VM.
-- The README says why the emulator is lightweight and how the app runs in user mode.
+- The README is about first use. `docs/running.md` covers scripting and platform details.
+- Linux virtual machines on macOS are described as untested, not unsupported.
+
+### Fixes
+
+- Deckbench's address is given as 127.0.0.1, since from Windows to WSL `localhost` waited 2 seconds per connection.
 
 ## v0.2.0
 
-Tested on WSL2 with Ubuntu 24.04. The regression session comes out identical to the reference, and the deck's self-test passes.
+The deck looks like the unit, and makes short videos of itself.
 
 ### The virtual deck
 
-- The face now looks like the unit (`--face real`, the default): black gloss plastic, a bevelled screen housing, a chrome frame round the pads, brushed metal transport keys with their lamps shining through, grey rubber pads and flat step keys. `--face flat` is the first look.
-- The bright last column and row along the right and bottom of the screen are gone. The bezel is black there.
+- The face looks like the unit (`--face real`, the default). `--face flat` is the first look.
+- The bright last column and row along the right and bottom of the screen are gone.
 - `--mute` plays nothing but still shows the MASTER / PHONES switch, for recordings.
-
-### Docs
-
-- The README says where `autoexec.bin` goes to try the mods: the top of the USB folder, then start the emulator again.
-- The README describes scripted use.
 
 ### Videos
 
-- `tools/reel.py` makes short videos of the emulator from an episode, a script of scenes. Shapes (`--shape`): 1080x1920 for Reels and Shorts, 1920x1080, the website's picture, or the deck's window as it opens.
-- `tools/reels/example.py` is the one to start from. `tools/reels/hero.py` makes the website's picture, playing. Your own episodes go in `demo/episodes`, which git ignores.
+- `tools/reel.py` makes short videos of the emulator from an episode, a script of scenes. `--shape` picks 1080x1920
+  for Reels and Shorts, 1920x1080, the website's picture, or the deck's window.
+- `tools/reels/example.py` is the one to start from. Your own episodes go in `demo/episodes`, which git ignores.
 - `--check` looks at an episode without a unit.
-- A reel can record from the simulated decks (`INPUT = True`) for live sampling. The headphones, which carry the input monitor, are mixed into the reel's sound.
+- A reel can record from the simulated decks (`INPUT = True`) for live sampling, with the headphones in its sound.
 - A recording script can move the tempo slider and hold a key down (`slider`, `key`).
+
+### Docs
+
+- The README says where `autoexec.bin` goes to try the mods, and describes scripted use.
 
 ### Fixes
 
-- On Windows, commands in a recording script could run again or late. The deck read the file's two-byte line ends as one. It now reads the file in bytes.
+- On Windows, commands in a recording script no longer run again or late.
 
 ## v0.1.0
 
-First release. Tested on Windows 11 with WSL2 and Ubuntu 24.04.
+The first release: the DJS-1000's own app on a computer, with a virtual deck. MIDI, real players on a physical
+network and macOS are not supported yet.
 
 ### The emulator
 
-- The DJS-1000's own app (firmware 1.22) runs unmodified under `qemu-arm` user mode, in the unit's root filesystem. Its devices are stand-ins: the panel, the touch strip, the backlight and the sound card.
+- The DJS-1000's app (firmware 1.22) runs unmodified under `qemu-arm` user mode, in the unit's root filesystem.
 - Several emulators can run side by side.
-- The guest runs in a chroot inside a user namespace, so it needs no root. `proot` is the fallback, about three times slower to start the app.
+- It needs no root. `proot` is the fallback, about three times slower to start the app.
 
 ### The virtual deck
 
-- Draws the machine: the screen, every lamp, and every control (buttons, pads, step keys, knobs, rotary selector, tempo slider, touch strip).
+- Draws the machine: the screen, every lamp and every control.
 - Master and headphone outputs, and a recording device as the input.
-- Lists the mods of the patch on the drive, grouped as on the mods' website, with a switch for each. Hover a row to read the mod's text.
+- Lists the mods of the patch on the drive, with a switch for each.
 
 ### USB drive and mods
 
 - A USB drive is a host folder. Samples load from it, and projects are saved, opened, deleted and rendered there.
-- An `autoexec.bin` in that folder runs as it does on a stick, which is how the mods are tried before a real unit.
+- An `autoexec.bin` in that folder runs as it does on a stick, to try the mods before a real unit.
 - The mods' settings are read from `djs1000-mods.txt` on the drive.
 
 ### Pro DJ Link
 
-- Works with simulated decks. The unit announces itself as player 1 and sees the decks, so SYNC, MASTER and the mods that read the decks all work.
-- The decks are deckbench's, a separate project that `start.py` runs.
+- Works with Deckbench's simulated decks, which `start.py` runs. The unit announces itself as player 1, so SYNC,
+  MASTER and the mods that read the decks all work.
 
 ### Tools
 
-- `tools/regress.py` records a fixed session and compares it with a reference.
 - `tools/session.py` scripts the app.
-
-### Not yet
-
-- MIDI.
-- Real decks on a physical network. WSL2's default networking does not see them.
-- macOS.

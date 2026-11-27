@@ -16,10 +16,9 @@ There is no CI (the emulator needs the firmware), so this is run by hand on the 
 2. `python tools/deck_selftest.py`: `ok`.
 3. `scripts/setup.sh` from scratch into a throwaway home (`DJS_HOME=~/djs-fresh scripts/setup.sh UPD KEY`), then
    `DJS_HOME=~/djs-fresh scripts/run.sh 75` and see the app start. Delete the home.
-4. `CHANGELOG.md`: rename "Not yet released" to `## vX.Y.Z` and say what changed for whoever runs the emulator (the
-   workflow fails without an entry for the tag). Say which environment it was tried on (WSL2 on Ubuntu 24.04, Linux).
-   A feature new in this release is described as it works now: a fix to it before the release amends its line, never
-   a line of its own. A fix line is only for a bug a published release had.
+4. `CHANGELOG.md`: rename "Not yet released" to `## vX.Y.Z` and write the entry as "The changelog" in `AGENTS.md`
+   says (the workflow fails without an entry for the tag). `python tools/release_notes.py vX.Y.Z` shows the notes
+   GitHub will get.
 
 ## The tag
 
@@ -29,7 +28,7 @@ git push && git push --tags      # a plain push does not send tags
 ```
 
 The workflow creates the release. GitHub shows the line breaks of a release's notes, so `tools/release_notes.py` joins the lines of
-each paragraph and list item. After a correction to the changelog, Actions, release notes, Run workflow writes the notes of a tag
+each paragraph and list item. After a correction to the changelog, Actions, release, Run workflow writes the notes of a tag
 again. Then the website's emulator page (`commitcollective.cc/djs1000/emulator/`) shows it
 as the latest release by itself.
 
